@@ -346,7 +346,7 @@ export function TasksList({
           ) : null}
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {[
             ["all", "Todas"],
             ["today", "Hoje"],
