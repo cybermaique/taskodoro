@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePomodoro } from "@/hooks/use-pomodoro";
 import type { PomodoroPhase } from "@/types/pomodoro";
 import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
@@ -132,6 +133,7 @@ interface DashboardProps {
 }
 
 type DisplayMode = "full" | "compact";
+type DashboardTab = "task-form" | "execution";
 
 export function Dashboard({ initialTasks }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>(() => sortByMostRecent(initialTasks));
@@ -149,6 +151,15 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     return window.localStorage.getItem("taskodoro_display_mode") === "compact"
       ? "compact"
       : "full";
+  });
+  const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
+    if (typeof window === "undefined") {
+      return "task-form";
+    }
+
+    return window.localStorage.getItem("taskodoro_selected_tab") === "execution"
+      ? "execution"
+      : "task-form";
   });
   const selectedTaskIdRef = useRef<string | null>(null);
   const isCompact = displayMode === "compact";
@@ -235,6 +246,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     window.localStorage.setItem("taskodoro_display_mode", displayMode);
   }, [displayMode]);
 
+  useEffect(() => {
+    window.localStorage.setItem("taskodoro_selected_tab", selectedTab);
+  }, [selectedTab]);
+
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === pomodoro.selectedTaskId) ?? null,
     [pomodoro.selectedTaskId, tasks],
@@ -309,7 +324,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
     let active = false;
     const interval = window.setInterval(() => {
-      document.title = active ? APP_TITLE : "⏰ Ciclo finalizado";
+      document.title = active ? APP_TITLE : "â° Ciclo finalizado";
       active = !active;
     }, 700);
 
@@ -654,12 +669,16 @@ export function Dashboard({ initialTasks }: DashboardProps) {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-7">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-xs font-semibold uppercase text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white/60">
-              <Target className="size-3.5" />
-              Foco pessoal e profissional
-            </div>
+            {!isCompact ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-xs font-semibold uppercase text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white/60">
+                <Target className="size-3.5" />
+                Foco pessoal e profissional
+              </div>
+            ) : null}
             <div>
-              <h1 className="text-4xl font-semibold leading-none md:text-5xl">{APP_TITLE}</h1>
+              {!isCompact ? (
+                <h1 className="text-4xl font-semibold leading-none md:text-5xl">{APP_TITLE}</h1>
+              ) : null}
               {!isCompact ? (
                 <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-white/55">
                 Organize prioridades, quebre tarefas em passos menores e mantenha o ritmo com Pomodoro.
@@ -668,7 +687,12 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 justify-self-start lg:justify-self-end">
+          <div
+            className={[
+              "flex items-center gap-2 justify-self-start lg:justify-self-end",
+              isCompact ? "hidden" : "",
+            ].join(" ")}
+          >
             {!isCompact ? (
               <>
                 <StatPill icon={CircleDot} label="Pendentes" value={dashboardStats.pending} />
@@ -726,61 +750,103 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
+        <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as DashboardTab)} className="gap-4">
+          <TabsList className="h-10 w-full justify-start rounded-2xl border border-slate-900/10 bg-white/70 p-1 dark:border-white/10 dark:bg-white/10">
+            <TabsTrigger value="task-form" className="h-8 rounded-xl px-3">
+              <CircleDot className="size-4" />
+              Nova tarefa
+            </TabsTrigger>
+            <TabsTrigger value="execution" className="h-8 rounded-xl px-3">
+              <ListTodo className="size-4" />
+              Tarefas e foco
+            </TabsTrigger>
+          </TabsList>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-          <div className="order-2 space-y-5 lg:order-1">
-            {!isCompact ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MiniMetric title="Hoje" value={dashboardStats.dueToday} caption="planejadas ou com prazo" />
-              <MiniMetric title="Atrasadas" value={dashboardStats.overdue} caption="pedem atenção" />
-              <MiniMetric title="Foco hoje" value={formatFocusTime(dashboardStats.focusToday)} caption={`${dashboardStats.pomodorosToday} pomodoros`} />
-              <MiniMetric title="Semana" value={formatFocusTime(dashboardStats.focusWeek)} caption={`${dashboardStats.completedWeek} concluídas`} />
-            </div>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="rounded-full"
-                onClick={() => setFocusModeOpen(Boolean(selectedTask))}
-                disabled={!selectedTask}
-              >
-                <Target className="size-4" />
-                Modo foco
-              </Button>
-              {!isCompact ? (
-                <Button variant="outline" className="rounded-full" onClick={moveTodayToTomorrow}>
-                <MoveRight className="size-4" />
-                Mover hoje para amanhã
-              </Button>
-              ) : null}
-            </div>
-
+          <TabsContent value="task-form">
             <TaskForm
               isSubmitting={creatingTask}
               isCompact={isCompact}
               categorySuggestions={categorySuggestions}
               onCreate={createTask}
             />
+          </TabsContent>
 
-            <TasksList
-              tasks={tasks}
-              selectedTaskId={pomodoro.selectedTaskId}
-              busyTaskId={busyTaskId}
-              isCompact={isCompact}
-              categorySuggestions={categorySuggestions}
-              onSelectTask={handleSelectTask}
-              onToggleTask={toggleTask}
-              onDeleteTask={deleteTask}
-              onUpdateTask={updateTaskWithBusy}
-              onCreateSubtask={createSubtask}
-              onToggleSubtask={toggleSubtask}
-              onDeleteSubtask={deleteSubtask}
-            />
+          <TabsContent value="execution">
+            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+              <div className={["order-2 lg:order-1", isCompact ? "space-y-0" : "space-y-5"].join(" ")}>
+                {!isCompact ? (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MiniMetric title="Hoje" value={dashboardStats.dueToday} caption="planejadas ou com prazo" />
+                    <MiniMetric title="Atrasadas" value={dashboardStats.overdue} caption="pedem atenção" />
+                    <MiniMetric title="Foco hoje" value={formatFocusTime(dashboardStats.focusToday)} caption={`${dashboardStats.pomodorosToday} pomodoros`} />
+                    <MiniMetric title="Semana" value={formatFocusTime(dashboardStats.focusWeek)} caption={`${dashboardStats.completedWeek} concluídas`} />
+                  </div>
+                ) : null}
+
+                {!isCompact ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() => setFocusModeOpen(Boolean(selectedTask))}
+                      disabled={!selectedTask}
+                    >
+                      <Target className="size-4" />
+                      Modo foco
+                    </Button>
+                    <Button variant="outline" className="rounded-full" onClick={moveTodayToTomorrow}>
+                      <MoveRight className="size-4" />
+                      Mover hoje para amanhã
+                    </Button>
+                  </div>
+                ) : null}
+
+                <TasksList
+                  tasks={tasks}
+                  selectedTaskId={pomodoro.selectedTaskId}
+                  busyTaskId={busyTaskId}
+                  isCompact={isCompact}
+                  categorySuggestions={categorySuggestions}
+                  onSelectTask={handleSelectTask}
+                  onToggleTask={toggleTask}
+                  onDeleteTask={deleteTask}
+                  onUpdateTask={updateTaskWithBusy}
+                  onCreateSubtask={createSubtask}
+                  onToggleSubtask={toggleSubtask}
+                  onDeleteSubtask={deleteSubtask}
+                />
+              </div>
+
+              <div className="order-1 lg:order-2">{pomodoroPanel}</div>
+            </section>
+          </TabsContent>
+        </Tabs>
+
+        {isCompact ? (
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <div className="flex rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
+              <Button
+                type="button"
+                size="sm"
+                variant={displayMode === "full" ? "default" : "ghost"}
+                className="h-8 rounded-full px-3"
+                onClick={() => setDisplayMode("full")}
+              >
+                Completo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={displayMode === "compact" ? "default" : "ghost"}
+                className="h-8 rounded-full px-3"
+                onClick={() => setDisplayMode("compact")}
+              >
+                Compacto
+              </Button>
+            </div>
+            <ThemeToggle />
           </div>
-
-          <div className="order-1 lg:order-2">{pomodoroPanel}</div>
-        </section>
+        ) : null}
       </div>
     </main>
   );
@@ -823,3 +889,8 @@ function MiniMetric({
     </div>
   );
 }
+
+
+
+
+
