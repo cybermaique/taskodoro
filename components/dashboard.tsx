@@ -703,7 +703,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "full" ? "default" : "ghost"}
+                variant="ghost"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("full")}
               >
@@ -712,7 +712,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "compact" ? "default" : "ghost"}
+                variant="default"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("compact")}
               >
@@ -828,7 +828,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "full" ? "default" : "ghost"}
+                variant="ghost"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("full")}
               >
@@ -837,7 +837,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "compact" ? "default" : "ghost"}
+                variant="default"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("compact")}
               >
