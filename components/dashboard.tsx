@@ -96,7 +96,14 @@ function playAlertTone() {
     return;
   }
 
-  const context = new Context();
+  const globalWindow = window as typeof window & {
+    __taskodoroAlertAudioContext?: AudioContext;
+  };
+  const context = globalWindow.__taskodoroAlertAudioContext ?? new Context();
+  globalWindow.__taskodoroAlertAudioContext = context;
+  if (context.state === "suspended") {
+    context.resume().catch(() => null);
+  }
   const duration = 0.18;
 
   [0, 0.25, 0.5].forEach((offset, index) => {
@@ -154,15 +161,35 @@ export function Dashboard({ initialTasks }: DashboardProps) {
   });
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
     if (typeof window === "undefined") {
-      return "task-form";
+      return "execution";
     }
 
     return window.localStorage.getItem("taskodoro_selected_tab") === "execution"
       ? "execution"
-      : "task-form";
+      : "execution";
   });
   const selectedTaskIdRef = useRef<string | null>(null);
+  const alertToneIntervalRef = useRef<number | null>(null);
   const isCompact = displayMode === "compact";
+
+  const stopContinuousAlert = useCallback(() => {
+    if (alertToneIntervalRef.current !== null) {
+      window.clearInterval(alertToneIntervalRef.current);
+      alertToneIntervalRef.current = null;
+    }
+    setIsBlinkingTitle(false);
+  }, []);
+
+  const startContinuousAlert = useCallback(() => {
+    if (alertToneIntervalRef.current !== null) {
+      window.clearInterval(alertToneIntervalRef.current);
+    }
+
+    playAlertTone();
+    alertToneIntervalRef.current = window.setInterval(() => {
+      playAlertTone();
+    }, 1500);
+  }, []);
 
   const categorySuggestions = useMemo(() => {
     const fromTasks = tasks
@@ -205,7 +232,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
       setCompletionMessage(message);
       setIsBlinkingTitle(true);
-      playAlertTone();
+      startContinuousAlert();
 
       if (finishedPhase === "focus" && selectedTaskIdRef.current) {
         recordFocusCycle(selectedTaskIdRef.current, durationSeconds, true).catch((error) => {
@@ -233,7 +260,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
         }
       }
     },
-    [recordFocusCycle],
+    [recordFocusCycle, startContinuousAlert],
   );
 
   const pomodoro = usePomodoro({ onPhaseFinished });
@@ -339,16 +366,34 @@ export function Dashboard({ initialTasks }: DashboardProps) {
       return;
     }
 
-    const stopBlink = () => setIsBlinkingTitle(false);
+    const stopBlink = () => stopContinuousAlert();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        stopBlink();
+      }
+    };
 
     window.addEventListener("click", stopBlink, { once: true });
     window.addEventListener("keydown", stopBlink, { once: true });
+    window.addEventListener("focus", stopBlink, { once: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("click", stopBlink);
       window.removeEventListener("keydown", stopBlink);
+      window.removeEventListener("focus", stopBlink);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [isBlinkingTitle]);
+  }, [isBlinkingTitle, stopContinuousAlert]);
+
+  useEffect(() => {
+    return () => {
+      if (alertToneIntervalRef.current !== null) {
+        window.clearInterval(alertToneIntervalRef.current);
+      }
+    };
+  }, []);
 
   const createTask = async (values: {
     title: string;
@@ -666,7 +711,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-7">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-5 pt-2 md:px-8 md:pb-7 md:pt-3">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="space-y-3">
             {!isCompact ? (
@@ -735,7 +780,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
                 onClick={() => {
                   setCompletionMessage(null);
                   pomodoro.clearCompletionAlert();
-                  setIsBlinkingTitle(false);
+                  stopContinuousAlert();
                 }}
               >
                 Entendi
@@ -750,7 +795,11 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
-        <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as DashboardTab)} className="gap-4">
+        <Tabs
+          value={selectedTab}
+          onValueChange={(value) => setSelectedTab(value as DashboardTab)}
+          className="gap-4"
+        >
           <TabsList className="h-10 w-full justify-start rounded-2xl border border-slate-900/10 bg-white/70 p-1 dark:border-white/10 dark:bg-white/10">
             <TabsTrigger value="task-form" className="h-8 rounded-xl px-3">
               <CircleDot className="size-4" />

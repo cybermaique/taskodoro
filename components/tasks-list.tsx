@@ -3,6 +3,7 @@
 import {
   DragEvent,
   FormEvent,
+  MouseEvent,
   type Dispatch,
   type SetStateAction,
   useEffect,
@@ -48,6 +49,7 @@ interface TasksListProps {
 
 type PriorityFilter = "all" | TaskPriority;
 type DueBucket = "overdue" | "today" | "week" | "later" | "none";
+const taskViewStorageKey = "taskodoro_task_view_filter";
 
 interface EditingState {
   title: string;
@@ -215,6 +217,18 @@ function saveTaskOrder(order: string[]) {
   window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      "button, a, input, textarea, select, label, [role='button'], [data-no-card-select='true']",
+    ),
+  );
+}
+
 export function TasksList({
   tasks,
   selectedTaskId,
@@ -241,6 +255,31 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const stored = window.localStorage.getItem(taskViewStorageKey);
+      const isValidTaskView =
+        stored === "all" ||
+        stored === "today" ||
+        stored === "overdue" ||
+        stored === "backlog" ||
+        stored === "work" ||
+        stored === "personal" ||
+        stored === "travel" ||
+        stored === "completed";
+
+      if (isValidTaskView) {
+        setViewFilter(stored);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(taskViewStorageKey, viewFilter);
+  }, [viewFilter]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -516,6 +555,18 @@ export function TasksList({
     handleDragEnd();
   };
 
+  const handleTaskCardClick = (
+    event: MouseEvent<HTMLLIElement>,
+    taskId: string,
+    isEditing: boolean,
+  ) => {
+    if (isEditing || isInteractiveTarget(event.target)) {
+      return;
+    }
+
+    onSelectTask(taskId);
+  };
+
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-slate-900/10 bg-white/80 p-4 shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.07]">
@@ -673,11 +724,15 @@ export function TasksList({
                     return (
                       <li
                         key={task.id}
+                        draggable={!isEditing}
+                        onDragStart={(event) => handleDragStart(event, task.id)}
                         onDragEnd={handleDragEnd}
                         onDragOver={(event) => handleDragOver(event, task.id)}
                         onDrop={(event) => handleDropOnTask(event, task.id)}
+                        onClick={(event) => handleTaskCardClick(event, task.id, Boolean(isEditing))}
                         className={[
                           "group border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                          !isEditing ? "cursor-grab active:cursor-grabbing" : "",
                           draggingTaskId === task.id ? "scale-[0.99] opacity-55" : "",
                           dragOverTaskId === task.id && draggingTaskId !== task.id
                             ? "ring-2 ring-teal-400/60"
@@ -692,10 +747,7 @@ export function TasksList({
                         <div className="grid gap-4 md:grid-cols-[auto_auto_1fr_auto] md:items-start">
                           <button
                             type="button"
-                            draggable={!isEditing}
-                            onDragStart={(event) => handleDragStart(event, task.id)}
-                            onDragEnd={handleDragEnd}
-                            className="mt-1 inline-flex size-8 cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing dark:hover:bg-white/10 dark:hover:text-white/70"
+                            className="inline-flex size-8 self-center cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing dark:hover:bg-white/10 dark:hover:text-white/70"
                             aria-label="Arrastar tarefa"
                             aria-grabbed={draggingTaskId === task.id}
                             title="Arrastar tarefa"
