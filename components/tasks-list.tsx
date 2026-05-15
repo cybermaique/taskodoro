@@ -1,12 +1,21 @@
 ﻿"use client";
 
-import { FormEvent, type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import {
+  DragEvent,
+  FormEvent,
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   CalendarClock,
   CalendarCheck,
   CheckCircle2,
   Circle,
   CirclePlus,
+  GripVertical,
   Pencil,
   Repeat,
   Search,
@@ -169,6 +178,43 @@ const bucketStyles: Record<DueBucket, string> = {
   none: "border-slate-400 bg-slate-500/10 text-slate-600 dark:text-white/60",
 };
 
+const taskOrderStorageKey = "taskodoro_task_order";
+
+function areEqualStringArrays(left: string[], right: string[]) {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function readStoredTaskOrder() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const stored = window.localStorage.getItem(taskOrderStorageKey);
+    const parsed = stored ? (JSON.parse(stored) as unknown) : null;
+
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+      ? parsed
+      : [];
+  } catch {
+    window.localStorage.removeItem(taskOrderStorageKey);
+    return [];
+  }
+}
+
+function normalizeTaskOrder(order: string[], tasks: Task[]) {
+  const taskIds = tasks.map((task) => task.id);
+  const taskIdSet = new Set(taskIds);
+  const existingIds = order.filter((taskId) => taskIdSet.has(taskId));
+  const missingIds = taskIds.filter((taskId) => !existingIds.includes(taskId));
+
+  return [...missingIds, ...existingIds];
+}
+
+function saveTaskOrder(order: string[]) {
+  window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
+}
+
 export function TasksList({
   tasks,
   selectedTaskId,
@@ -191,6 +237,50 @@ export function TasksList({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [subtaskDraftByTaskId, setSubtaskDraftByTaskId] = useState<Record<string, string>>({});
+  const [taskOrder, setTaskOrder] = useState<string[]>([]);
+  const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setTaskOrder(readStoredTaskOrder());
+      setHasLoadedTaskOrder(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  const normalizedTaskOrder = useMemo(
+    () => normalizeTaskOrder(taskOrder, tasks),
+    [taskOrder, tasks],
+  );
+
+  useEffect(() => {
+    if (!hasLoadedTaskOrder) {
+      return;
+    }
+
+    if (!areEqualStringArrays(taskOrder, normalizedTaskOrder)) {
+      saveTaskOrder(normalizedTaskOrder);
+    }
+  }, [hasLoadedTaskOrder, normalizedTaskOrder, taskOrder]);
+
+  const orderedTasks = useMemo(() => {
+    const orderIndex = new Map(normalizedTaskOrder.map((taskId, index) => [taskId, index]));
+    const fallbackIndex = new Map(tasks.map((task, index) => [task.id, index]));
+
+    return [...tasks].sort((left, right) => {
+      const leftIndex = orderIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = orderIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
+
+      return (fallbackIndex.get(left.id) ?? 0) - (fallbackIndex.get(right.id) ?? 0);
+    });
+  }, [normalizedTaskOrder, tasks]);
 
   const availableCategories = useMemo(() => {
     const fromTasks = tasks
@@ -205,7 +295,7 @@ export function TasksList({
   const filteredTasks = useMemo(() => {
     const todayKey = getTodayKey();
 
-    return tasks.filter((task) => {
+    return orderedTasks.filter((task) => {
       if (statusFilter !== "all" && task.status !== statusFilter) {
         return false;
       }
@@ -274,7 +364,7 @@ export function TasksList({
         inSubtasks
       );
     });
-  }, [categoryFilter, priorityFilter, search, statusFilter, tasks, viewFilter]);
+  }, [categoryFilter, orderedTasks, priorityFilter, search, statusFilter, viewFilter]);
 
   const groupedTasks = useMemo(() => {
     const groups: Record<DueBucket, Task[]> = {
@@ -320,6 +410,110 @@ export function TasksList({
 
     await onCreateSubtask(taskId, title);
     setSubtaskDraftByTaskId((current) => ({ ...current, [taskId]: "" }));
+  };
+
+  const moveTaskBefore = (taskId: string, targetTaskId: string) => {
+    if (taskId === targetTaskId) {
+      return;
+    }
+
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const taskToMove = taskById.get(taskId);
+    const targetTask = taskById.get(targetTaskId);
+
+    if (
+      !taskToMove ||
+      !targetTask ||
+      getDueBucket(taskToMove.due_date) !== getDueBucket(targetTask.due_date)
+    ) {
+      return;
+    }
+
+    setTaskOrder((current) => {
+      const currentIds = normalizeTaskOrder(current, tasks);
+      const nextOrder = currentIds.filter((currentTaskId) => currentTaskId !== taskId);
+      const targetIndex = nextOrder.indexOf(targetTaskId);
+
+      if (targetIndex === -1) {
+        return current;
+      }
+
+      nextOrder.splice(targetIndex, 0, taskId);
+      saveTaskOrder(nextOrder);
+      return nextOrder;
+    });
+  };
+
+  const moveTaskToBucketEnd = (taskId: string, bucket: DueBucket) => {
+    const taskToMove = tasks.find((task) => task.id === taskId);
+
+    if (!taskToMove || getDueBucket(taskToMove.due_date) !== bucket) {
+      return;
+    }
+
+    setTaskOrder((current) => {
+      const currentIds = normalizeTaskOrder(current, tasks);
+      const lastTaskInBucket = [...orderedTasks]
+        .reverse()
+        .find((task) => task.id !== taskId && getDueBucket(task.due_date) === bucket);
+
+      if (!lastTaskInBucket) {
+        return current;
+      }
+
+      const nextOrder = currentIds.filter((currentTaskId) => currentTaskId !== taskId);
+      const targetIndex = nextOrder.indexOf(lastTaskInBucket.id);
+
+      if (targetIndex === -1) {
+        return current;
+      }
+
+      nextOrder.splice(targetIndex + 1, 0, taskId);
+      saveTaskOrder(nextOrder);
+      return nextOrder;
+    });
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLElement>, taskId: string) => {
+    setDraggingTaskId(taskId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", taskId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingTaskId(null);
+    setDragOverTaskId(null);
+  };
+
+  const handleDragOver = (event: DragEvent, taskId?: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverTaskId(taskId ?? null);
+  };
+
+  const handleDropOnTask = (event: DragEvent<HTMLLIElement>, targetTaskId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+
+    if (taskId) {
+      moveTaskBefore(taskId, targetTaskId);
+    }
+
+    handleDragEnd();
+  };
+
+  const handleDropOnBucket = (event: DragEvent<HTMLUListElement>, bucket: DueBucket) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+
+    if (taskId) {
+      moveTaskToBucketEnd(taskId, bucket);
+    }
+
+    handleDragEnd();
   };
 
   return (
@@ -454,7 +648,11 @@ export function TasksList({
                   </span>
                 </div>
 
-                <ul className="space-y-3">
+                <ul
+                  className="space-y-3"
+                  onDragOver={(event) => handleDragOver(event)}
+                  onDrop={(event) => handleDropOnBucket(event, bucket)}
+                >
                   {tasksByBucket.map((task) => {
                     const isCompleted = task.status === "completed";
                     const isActive = task.id === selectedTaskId;
@@ -475,8 +673,15 @@ export function TasksList({
                     return (
                       <li
                         key={task.id}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(event) => handleDragOver(event, task.id)}
+                        onDrop={(event) => handleDropOnTask(event, task.id)}
                         className={[
                           "group border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                          draggingTaskId === task.id ? "scale-[0.99] opacity-55" : "",
+                          dragOverTaskId === task.id && draggingTaskId !== task.id
+                            ? "ring-2 ring-teal-400/60"
+                            : "",
                           isCompact ? "rounded-2xl p-2.5" : "rounded-3xl p-4",
                           isCompleted
                             ? "border-emerald-500/25"
@@ -484,7 +689,20 @@ export function TasksList({
                           isActive ? "ring-2 ring-teal-400/70" : "",
                         ].join(" ")}
                       >
-                        <div className="grid gap-4 md:grid-cols-[auto_1fr_auto] md:items-start">
+                        <div className="grid gap-4 md:grid-cols-[auto_auto_1fr_auto] md:items-start">
+                          <button
+                            type="button"
+                            draggable={!isEditing}
+                            onDragStart={(event) => handleDragStart(event, task.id)}
+                            onDragEnd={handleDragEnd}
+                            className="mt-1 inline-flex size-8 cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing dark:hover:bg-white/10 dark:hover:text-white/70"
+                            aria-label="Arrastar tarefa"
+                            aria-grabbed={draggingTaskId === task.id}
+                            title="Arrastar tarefa"
+                          >
+                            <GripVertical className="size-4" />
+                          </button>
+
                           <Checkbox
                             checked={isCompleted}
                             onCheckedChange={() => onToggleTask(task)}
