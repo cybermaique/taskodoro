@@ -365,6 +365,32 @@ export function TasksList({
           ))}
         </div>
 
+        {isCompact ? (
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={categoryFilter === "all" ? "default" : "outline"}
+              className="rounded-full"
+              onClick={() => setCategoryFilter("all")}
+            >
+              Todas categorias
+            </Button>
+            {availableCategories.map((category) => (
+              <Button
+                key={category}
+                type="button"
+                size="sm"
+                variant={categoryFilter === category ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => setCategoryFilter(category)}
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+
         <div className={isCompact ? "mt-4" : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.9fr]"}>
           <label className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
