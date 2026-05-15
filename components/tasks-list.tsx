@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, type Dispatch, type SetStateAction, useMemo, useState } from "react";
 import {
@@ -325,7 +325,7 @@ export function TasksList({
           <div>
             <h2 className="text-lg font-semibold">Tarefas</h2>
             <p className="text-sm text-slate-500 dark:text-white/45">
-              {filteredTasks.length} de {tasks.length} na vista atual
+              {filteredTasks.length} de {tasks.length} na visão atual
             </p>
           </div>
 
@@ -472,7 +472,7 @@ export function TasksList({
                         key={task.id}
                         className={[
                           "group border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
-                          isCompact ? "rounded-2xl p-3" : "rounded-3xl p-4",
+                          isCompact ? "rounded-2xl p-2.5" : "rounded-3xl p-4",
                           isCompleted
                             ? "border-emerald-500/25"
                             : "border-slate-900/10 dark:border-white/10",
@@ -488,7 +488,7 @@ export function TasksList({
                             className="mt-1"
                           />
 
-                          <div className="min-w-0 space-y-3">
+                          <div className={["min-w-0", isCompact ? "space-y-2" : "space-y-3"].join(" ")}>
                             {isEditing ? (
                               <TaskEditForm
                                 editingState={editingState}
@@ -723,10 +723,15 @@ export function TasksList({
                             </div>
                           </div>
 
-                          <div className="flex justify-end gap-2 md:flex-col">
+                          <div
+                            className={[
+                              "flex justify-end gap-1.5",
+                              isCompact ? "items-start md:flex-row" : "md:flex-col",
+                            ].join(" ")}
+                          >
                             <Button
                               type="button"
-                              size="icon"
+                              size={isCompact ? "icon-sm" : "icon"}
                               variant="ghost"
                               onClick={() => startEdit(task)}
                               disabled={Boolean(isEditing)}
@@ -736,7 +741,7 @@ export function TasksList({
                             </Button>
                             <Button
                               type="button"
-                              size="icon"
+                              size={isCompact ? "icon-sm" : "icon"}
                               variant="ghost"
                               onClick={() => onDeleteTask(task.id)}
                               disabled={isBusy}
@@ -746,11 +751,11 @@ export function TasksList({
                             </Button>
                             <Button
                               type="button"
-                              size="sm"
+                              size={isCompact ? "xs" : "sm"}
                               className={
                                 isActive
-                                  ? "rounded-full bg-teal-500 text-white hover:bg-teal-600"
-                                  : "rounded-full"
+                                  ? "h-7 rounded-full bg-teal-500 px-2 text-xs text-white hover:bg-teal-600"
+                                  : "h-7 rounded-full px-2 text-xs"
                               }
                               variant={isActive ? "default" : "outline"}
                               onClick={() => onSelectTask(isActive ? null : task.id)}
@@ -945,3 +950,5 @@ function TaskEditForm({
     </div>
   );
 }
+
+

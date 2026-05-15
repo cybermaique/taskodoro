@@ -92,14 +92,24 @@ export function PomodoroPanel({
             </div>
           </div>
 
-          <div className="px-5 sm:px-6">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 shadow-lg shadow-black/10">
-              <p className="text-xs font-semibold uppercase text-white/45">Tarefa ativa</p>
-              <p className="mt-2 text-base font-semibold leading-snug">
-                {selectedTask?.title ?? "Selecione uma tarefa para iniciar o foco"}
-              </p>
+          {isCompact ? (
+            selectedTask ? (
+              <div className="px-5 sm:px-6">
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-3 shadow-lg shadow-black/10">
+                  <p className="text-sm font-semibold leading-snug">{selectedTask.title}</p>
+                </div>
+              </div>
+            ) : null
+          ) : (
+            <div className="px-5 sm:px-6">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4 shadow-lg shadow-black/10">
+                <p className="text-xs font-semibold uppercase text-white/45">Tarefa ativa</p>
+                <p className="mt-2 text-base font-semibold leading-snug">
+                  {selectedTask?.title ?? "Selecione uma tarefa para iniciar o foco"}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className={isCompact ? "mt-4 grid place-items-center px-5 sm:px-6" : "mt-6 grid place-items-center px-5 sm:px-6"}>
             <div
