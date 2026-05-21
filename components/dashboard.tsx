@@ -8,9 +8,11 @@ import {
   CircleDot,
   ListTodo,
   MoveRight,
+  StickyNote,
   Target,
 } from "lucide-react";
 
+import { NotesPanel } from "@/components/notes-panel";
 import { PomodoroPanel } from "@/components/pomodoro-panel";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
@@ -20,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePomodoro } from "@/hooks/use-pomodoro";
+import type { Note } from "@/types/note";
 import type { PomodoroPhase } from "@/types/pomodoro";
 import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
 
@@ -138,12 +141,13 @@ function phaseText(phase: PomodoroPhase) {
 
 interface DashboardProps {
   initialTasks: Task[];
+  initialNotes: Note[];
 }
 
 type DisplayMode = "full" | "compact";
-type DashboardTab = "task-form" | "execution";
+type DashboardTab = "task-form" | "execution" | "notes";
 
-export function Dashboard({ initialTasks }: DashboardProps) {
+export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>(() =>
     sortByMostRecent(initialTasks),
   );
@@ -170,7 +174,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     }
 
     const stored = window.localStorage.getItem("taskodoro_selected_tab");
-    return stored === "task-form" || stored === "execution"
+    return stored === "task-form" ||
+      stored === "execution" ||
+      stored === "notes"
       ? stored
       : "execution";
   });
@@ -885,6 +891,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <ListTodo className="size-4" />
               Tarefas e foco
             </TabsTrigger>
+            <TabsTrigger value="notes" className="h-8 rounded-xl px-3">
+              <StickyNote className="size-4" />
+              Anotações
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="task-form">
@@ -969,6 +979,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
               <div className="order-1 lg:order-2">{pomodoroPanel}</div>
             </section>
+          </TabsContent>
+
+          <TabsContent value="notes">
+            <NotesPanel initialNotes={initialNotes} />
           </TabsContent>
         </Tabs>
 
