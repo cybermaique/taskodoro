@@ -8,9 +8,11 @@ import {
   CircleDot,
   ListTodo,
   MoveRight,
+  StickyNote,
   Target,
 } from "lucide-react";
 
+import { NotesPanel } from "@/components/notes-panel";
 import { PomodoroPanel } from "@/components/pomodoro-panel";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
@@ -20,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePomodoro } from "@/hooks/use-pomodoro";
+import type { Note } from "@/types/note";
 import type { PomodoroPhase } from "@/types/pomodoro";
 import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
 
@@ -39,7 +42,8 @@ const DEFAULT_CATEGORIES = [
 function sortByMostRecent(tasks: Task[]) {
   return [...tasks].sort(
     (left, right) =>
-      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+      new Date(right.created_at).getTime() -
+      new Date(left.created_at).getTime(),
   );
 }
 
@@ -96,7 +100,14 @@ function playAlertTone() {
     return;
   }
 
-  const context = new Context();
+  const globalWindow = window as typeof window & {
+    __taskodoroAlertAudioContext?: AudioContext;
+  };
+  const context = globalWindow.__taskodoroAlertAudioContext ?? new Context();
+  globalWindow.__taskodoroAlertAudioContext = context;
+  if (context.state === "suspended") {
+    context.resume().catch(() => null);
+  }
   const duration = 0.18;
 
   [0, 0.25, 0.5].forEach((offset, index) => {
@@ -130,17 +141,22 @@ function phaseText(phase: PomodoroPhase) {
 
 interface DashboardProps {
   initialTasks: Task[];
+  initialNotes: Note[];
 }
 
 type DisplayMode = "full" | "compact";
-type DashboardTab = "task-form" | "execution";
+type DashboardTab = "task-form" | "execution" | "notes";
 
-export function Dashboard({ initialTasks }: DashboardProps) {
-  const [tasks, setTasks] = useState<Task[]>(() => sortByMostRecent(initialTasks));
+export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    sortByMostRecent(initialTasks),
+  );
   const [creatingTask, setCreatingTask] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  const [completionMessage, setCompletionMessage] = useState<string | null>(
+    null,
+  );
   const [isBlinkingTitle, setIsBlinkingTitle] = useState(false);
   const [focusModeOpen, setFocusModeOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
@@ -154,15 +170,38 @@ export function Dashboard({ initialTasks }: DashboardProps) {
   });
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
     if (typeof window === "undefined") {
-      return "task-form";
+      return "execution";
     }
 
-    return window.localStorage.getItem("taskodoro_selected_tab") === "execution"
-      ? "execution"
-      : "task-form";
+    const stored = window.localStorage.getItem("taskodoro_selected_tab");
+    return stored === "task-form" ||
+      stored === "execution" ||
+      stored === "notes"
+      ? stored
+      : "execution";
   });
   const selectedTaskIdRef = useRef<string | null>(null);
+  const alertToneIntervalRef = useRef<number | null>(null);
   const isCompact = displayMode === "compact";
+
+  const stopContinuousAlert = useCallback(() => {
+    if (alertToneIntervalRef.current !== null) {
+      window.clearInterval(alertToneIntervalRef.current);
+      alertToneIntervalRef.current = null;
+    }
+    setIsBlinkingTitle(false);
+  }, []);
+
+  const startContinuousAlert = useCallback(() => {
+    if (alertToneIntervalRef.current !== null) {
+      window.clearInterval(alertToneIntervalRef.current);
+    }
+
+    playAlertTone();
+    alertToneIntervalRef.current = window.setInterval(() => {
+      playAlertTone();
+    }, 1500);
+  }, []);
 
   const categorySuggestions = useMemo(() => {
     const fromTasks = tasks
@@ -173,7 +212,11 @@ export function Dashboard({ initialTasks }: DashboardProps) {
   }, [tasks]);
 
   const recordFocusCycle = useCallback(
-    async (taskId: string, durationSeconds: number, completedCycle: boolean) => {
+    async (
+      taskId: string,
+      durationSeconds: number,
+      completedCycle: boolean,
+    ) => {
       const response = await fetch(`/api/tasks/${taskId}/focus-sessions`, {
         method: "POST",
         headers: {
@@ -197,7 +240,11 @@ export function Dashboard({ initialTasks }: DashboardProps) {
   );
 
   const onPhaseFinished = useCallback(
-    (finishedPhase: PomodoroPhase, nextPhase: PomodoroPhase, durationSeconds: number) => {
+    (
+      finishedPhase: PomodoroPhase,
+      nextPhase: PomodoroPhase,
+      durationSeconds: number,
+    ) => {
       const message =
         finishedPhase === "focus"
           ? "Foco concluído! Hora de fazer uma pausa curta."
@@ -205,12 +252,18 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
       setCompletionMessage(message);
       setIsBlinkingTitle(true);
-      playAlertTone();
+      startContinuousAlert();
 
       if (finishedPhase === "focus" && selectedTaskIdRef.current) {
-        recordFocusCycle(selectedTaskIdRef.current, durationSeconds, true).catch((error) => {
+        recordFocusCycle(
+          selectedTaskIdRef.current,
+          durationSeconds,
+          true,
+        ).catch((error) => {
           setErrorMessage(
-            error instanceof Error ? error.message : "Erro ao registrar sessão de foco.",
+            error instanceof Error
+              ? error.message
+              : "Erro ao registrar sessão de foco.",
           );
         });
       }
@@ -233,7 +286,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
         }
       }
     },
-    [recordFocusCycle],
+    [recordFocusCycle, startContinuousAlert],
   );
 
   const pomodoro = usePomodoro({ onPhaseFinished });
@@ -259,8 +312,12 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     const todayKey = toDateKey(new Date());
     const weekStart = startOfWeek(new Date());
     const pending = tasks.filter((task) => task.status === "pending").length;
-    const inProgress = tasks.filter((task) => task.status === "in_progress").length;
-    const completed = tasks.filter((task) => task.status === "completed").length;
+    const inProgress = tasks.filter(
+      (task) => task.status === "in_progress",
+    ).length;
+    const completed = tasks.filter(
+      (task) => task.status === "completed",
+    ).length;
     const overdue = tasks.filter(
       (task) =>
         task.status !== "completed" &&
@@ -305,8 +362,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
       completedWeek,
       focusToday,
       focusWeek,
-      pomodorosToday: todaySessions.filter((session) => session.completed_cycle).length,
-      pomodorosWeek: weekSessions.filter((session) => session.completed_cycle).length,
+      pomodorosToday: todaySessions.filter((session) => session.completed_cycle)
+        .length,
+      pomodorosWeek: weekSessions.filter((session) => session.completed_cycle)
+        .length,
       dueToday: tasks.filter(
         (task) =>
           task.status !== "completed" &&
@@ -339,16 +398,34 @@ export function Dashboard({ initialTasks }: DashboardProps) {
       return;
     }
 
-    const stopBlink = () => setIsBlinkingTitle(false);
+    const stopBlink = () => stopContinuousAlert();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        stopBlink();
+      }
+    };
 
     window.addEventListener("click", stopBlink, { once: true });
     window.addEventListener("keydown", stopBlink, { once: true });
+    window.addEventListener("focus", stopBlink, { once: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("click", stopBlink);
       window.removeEventListener("keydown", stopBlink);
+      window.removeEventListener("focus", stopBlink);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [isBlinkingTitle]);
+  }, [isBlinkingTitle, stopContinuousAlert]);
+
+  useEffect(() => {
+    return () => {
+      if (alertToneIntervalRef.current !== null) {
+        window.clearInterval(alertToneIntervalRef.current);
+      }
+    };
+  }, []);
 
   const createTask = async (values: {
     title: string;
@@ -389,7 +466,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     }
   };
 
-  const updateTask = async (taskId: string, payload: Record<string, unknown>) => {
+  const updateTask = async (
+    taskId: string,
+    payload: Record<string, unknown>,
+  ) => {
     const response = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: {
@@ -408,7 +488,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
     if (payload.status === "completed" && data.task.recurrence !== "none") {
       const listResponse = await fetch("/api/tasks", { cache: "no-store" });
-      const listData = (await listResponse.json()) as { tasks?: Task[]; error?: string };
+      const listData = (await listResponse.json()) as {
+        tasks?: Task[];
+        error?: string;
+      };
 
       if (listResponse.ok && listData.tasks) {
         setTasks(sortByMostRecent(listData.tasks));
@@ -416,14 +499,19 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     }
   };
 
-  const updateTaskWithBusy = async (taskId: string, payload: Record<string, unknown>) => {
+  const updateTaskWithBusy = async (
+    taskId: string,
+    payload: Record<string, unknown>,
+  ) => {
     setBusyTaskId(taskId);
     setErrorMessage(null);
 
     try {
       await updateTask(taskId, payload);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao atualizar tarefa.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Erro ao atualizar tarefa.",
+      );
     } finally {
       setBusyTaskId(null);
     }
@@ -455,7 +543,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
         pomodoro.setSelectedTaskId(null);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao excluir tarefa.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Erro ao excluir tarefa.",
+      );
     } finally {
       setBusyTaskId(null);
     }
@@ -482,7 +572,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
       setTasks((current) => upsertTask(current, data.task as Task));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao criar subtarefa.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Erro ao criar subtarefa.",
+      );
     } finally {
       setBusyTaskId(null);
     }
@@ -503,12 +595,16 @@ export function Dashboard({ initialTasks }: DashboardProps) {
       const data = (await response.json()) as { task?: Task; error?: string };
 
       if (!response.ok || !data.task) {
-        throw new Error(data.error ?? "Não foi possível atualizar a subtarefa.");
+        throw new Error(
+          data.error ?? "Não foi possível atualizar a subtarefa.",
+        );
       }
 
       setTasks((current) => upsertTask(current, data.task as Task));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao atualizar subtarefa.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Erro ao atualizar subtarefa.",
+      );
     }
   };
 
@@ -528,7 +624,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
       setTasks((current) => upsertTask(current, data.task as Task));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao excluir subtarefa.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Erro ao excluir subtarefa.",
+      );
     }
   };
 
@@ -543,7 +641,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
     );
 
     await Promise.all(
-      tasksToMove.map((task) => updateTask(task.id, { planned_for: tomorrowKey })),
+      tasksToMove.map((task) =>
+        updateTask(task.id, { planned_for: tomorrowKey }),
+      ),
     );
   };
 
@@ -614,12 +714,18 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               Voltar para lista
             </Button>
             <p className="text-sm uppercase text-teal-200/70">Modo foco</p>
-            <h1 className="mt-2 text-4xl font-semibold">{selectedTask.title}</h1>
+            <h1 className="mt-2 text-4xl font-semibold">
+              {selectedTask.title}
+            </h1>
             {selectedTask.description ? (
-              <p className="mt-4 max-w-2xl text-white/60">{selectedTask.description}</p>
+              <p className="mt-4 max-w-2xl text-white/60">
+                {selectedTask.description}
+              </p>
             ) : null}
             <div className="mt-8 space-y-3">
-              <h2 className="text-sm font-semibold uppercase text-white/50">Subtarefas</h2>
+              <h2 className="text-sm font-semibold uppercase text-white/50">
+                Subtarefas
+              </h2>
               {selectedTask.subtasks.length ? (
                 selectedTask.subtasks.map((subtask) => (
                   <label
@@ -632,19 +738,27 @@ export function Dashboard({ initialTasks }: DashboardProps) {
                         toggleSubtask(subtask.id, !subtask.is_completed)
                       }
                     />
-                    <span className={subtask.is_completed ? "text-white/35 line-through" : ""}>
+                    <span
+                      className={
+                        subtask.is_completed ? "text-white/35 line-through" : ""
+                      }
+                    >
                       {subtask.title}
                     </span>
                   </label>
                 ))
               ) : (
-                <p className="text-white/45">Sem subtarefas para esta tarefa.</p>
+                <p className="text-white/45">
+                  Sem subtarefas para esta tarefa.
+                </p>
               )}
             </div>
             <div className="mt-8 flex flex-wrap gap-2">
               <Button
                 className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300"
-                onClick={() => updateTaskWithBusy(selectedTask.id, { status: "completed" })}
+                onClick={() =>
+                  updateTaskWithBusy(selectedTask.id, { status: "completed" })
+                }
               >
                 <CheckCircle2 className="size-4" />
                 Concluir tarefa
@@ -652,7 +766,9 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 variant="outline"
                 className="border-white/10 bg-white/10 text-white hover:bg-white/15"
-                onClick={() => updateTaskWithBusy(selectedTask.id, { status: "in_progress" })}
+                onClick={() =>
+                  updateTaskWithBusy(selectedTask.id, { status: "in_progress" })
+                }
               >
                 Marcar em andamento
               </Button>
@@ -666,7 +782,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-8 md:py-7">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-5 pt-2 md:px-8 md:pb-7 md:pt-3">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="space-y-3">
             {!isCompact ? (
@@ -677,12 +793,15 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             ) : null}
             <div>
               {!isCompact ? (
-                <h1 className="text-4xl font-semibold leading-none md:text-5xl">{APP_TITLE}</h1>
+                <h1 className="text-4xl font-semibold leading-none md:text-5xl">
+                  {APP_TITLE}
+                </h1>
               ) : null}
               {!isCompact ? (
                 <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-white/55">
-                Organize prioridades, quebre tarefas em passos menores e mantenha o ritmo com Pomodoro.
-              </p>
+                  Organize prioridades, quebre tarefas em passos menores e
+                  mantenha o ritmo com Pomodoro.
+                </p>
               ) : null}
             </div>
           </div>
@@ -695,8 +814,16 @@ export function Dashboard({ initialTasks }: DashboardProps) {
           >
             {!isCompact ? (
               <>
-                <StatPill icon={CircleDot} label="Pendentes" value={dashboardStats.pending} />
-                <StatPill icon={CheckCircle2} label="Feitas" value={dashboardStats.completed} />
+                <StatPill
+                  icon={CircleDot}
+                  label="Pendentes"
+                  value={dashboardStats.pending}
+                />
+                <StatPill
+                  icon={CheckCircle2}
+                  label="Feitas"
+                  value={dashboardStats.completed}
+                />
               </>
             ) : null}
             <div className="flex rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
@@ -735,7 +862,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
                 onClick={() => {
                   setCompletionMessage(null);
                   pomodoro.clearCompletionAlert();
-                  setIsBlinkingTitle(false);
+                  stopContinuousAlert();
                 }}
               >
                 Entendi
@@ -750,7 +877,11 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
-        <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as DashboardTab)} className="gap-4">
+        <Tabs
+          value={selectedTab}
+          onValueChange={(value) => setSelectedTab(value as DashboardTab)}
+          className="gap-4"
+        >
           <TabsList className="h-10 w-full justify-start rounded-2xl border border-slate-900/10 bg-white/70 p-1 dark:border-white/10 dark:bg-white/10">
             <TabsTrigger value="task-form" className="h-8 rounded-xl px-3">
               <CircleDot className="size-4" />
@@ -759,6 +890,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
             <TabsTrigger value="execution" className="h-8 rounded-xl px-3">
               <ListTodo className="size-4" />
               Tarefas e foco
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="h-8 rounded-xl px-3">
+              <StickyNote className="size-4" />
+              Anotações
             </TabsTrigger>
           </TabsList>
 
@@ -773,13 +908,34 @@ export function Dashboard({ initialTasks }: DashboardProps) {
 
           <TabsContent value="execution">
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-              <div className={["order-2 lg:order-1", isCompact ? "space-y-0" : "space-y-5"].join(" ")}>
+              <div
+                className={[
+                  "order-2 lg:order-1",
+                  isCompact ? "space-y-0" : "space-y-5",
+                ].join(" ")}
+              >
                 {!isCompact ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <MiniMetric title="Hoje" value={dashboardStats.dueToday} caption="planejadas ou com prazo" />
-                    <MiniMetric title="Atrasadas" value={dashboardStats.overdue} caption="pedem atenção" />
-                    <MiniMetric title="Foco hoje" value={formatFocusTime(dashboardStats.focusToday)} caption={`${dashboardStats.pomodorosToday} pomodoros`} />
-                    <MiniMetric title="Semana" value={formatFocusTime(dashboardStats.focusWeek)} caption={`${dashboardStats.completedWeek} concluídas`} />
+                    <MiniMetric
+                      title="Hoje"
+                      value={dashboardStats.dueToday}
+                      caption="planejadas ou com prazo"
+                    />
+                    <MiniMetric
+                      title="Atrasadas"
+                      value={dashboardStats.overdue}
+                      caption="pedem atenção"
+                    />
+                    <MiniMetric
+                      title="Foco hoje"
+                      value={formatFocusTime(dashboardStats.focusToday)}
+                      caption={`${dashboardStats.pomodorosToday} pomodoros`}
+                    />
+                    <MiniMetric
+                      title="Semana"
+                      value={formatFocusTime(dashboardStats.focusWeek)}
+                      caption={`${dashboardStats.completedWeek} concluídas`}
+                    />
                   </div>
                 ) : null}
 
@@ -794,7 +950,11 @@ export function Dashboard({ initialTasks }: DashboardProps) {
                       <Target className="size-4" />
                       Modo foco
                     </Button>
-                    <Button variant="outline" className="rounded-full" onClick={moveTodayToTomorrow}>
+                    <Button
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={moveTodayToTomorrow}
+                    >
                       <MoveRight className="size-4" />
                       Mover hoje para amanhã
                     </Button>
@@ -820,6 +980,10 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <div className="order-1 lg:order-2">{pomodoroPanel}</div>
             </section>
           </TabsContent>
+
+          <TabsContent value="notes">
+            <NotesPanel initialNotes={initialNotes} />
+          </TabsContent>
         </Tabs>
 
         {isCompact ? (
@@ -828,7 +992,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "full" ? "default" : "ghost"}
+                variant="ghost"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("full")}
               >
@@ -837,7 +1001,7 @@ export function Dashboard({ initialTasks }: DashboardProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={displayMode === "compact" ? "default" : "ghost"}
+                variant="default"
                 className="h-8 rounded-full px-3"
                 onClick={() => setDisplayMode("compact")}
               >
@@ -881,16 +1045,15 @@ function MiniMetric({
 }) {
   return (
     <div className="rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.06]">
-      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">{title}</p>
+      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">
+        {title}
+      </p>
       <div className="mt-2 flex items-end justify-between gap-3">
         <strong className="text-2xl leading-none">{value}</strong>
-        <span className="text-right text-xs text-slate-500 dark:text-white/45">{caption}</span>
+        <span className="text-right text-xs text-slate-500 dark:text-white/45">
+          {caption}
+        </span>
       </div>
     </div>
   );
 }
-
-
-
-
-

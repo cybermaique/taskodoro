@@ -75,4 +75,21 @@ before update on public.subtasks
 for each row
 execute function public.set_updated_at();
 
+-- ── notes ──────────────────────────────────────────────────────────────────
+create table if not exists public.notes (
+  id uuid primary key default gen_random_uuid(),
+  content text not null,
+  tags text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_notes_created_at_desc on public.notes (created_at desc);
+
+drop trigger if exists notes_set_updated_at on public.notes;
+create trigger notes_set_updated_at
+before update on public.notes
+for each row
+execute function public.set_updated_at();
+
 notify pgrst, 'reload schema';
