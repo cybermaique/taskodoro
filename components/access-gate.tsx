@@ -62,11 +62,13 @@ export function AccessGate({ children }: AccessGateProps) {
 
   if (!state) {
     return (
-      <Card className="mx-auto mt-20 max-w-md">
-        <CardHeader>
-          <CardTitle>Carregando...</CardTitle>
-        </CardHeader>
-      </Card>
+      <div className="access-loading-safe-insets min-h-svh">
+        <Card className="mx-auto w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Carregando...</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
     );
   }
 
@@ -75,8 +77,8 @@ export function AccessGate({ children }: AccessGateProps) {
   }
 
   return (
-    <div className="min-h-screen px-4 py-10">
-      <Card className="mx-auto max-w-md border-border/70">
+    <div className="access-safe-insets grid min-h-svh place-items-center">
+      <Card className="w-full max-w-md border-border/70">
         <CardHeader>
           <CardTitle>Acesso protegido</CardTitle>
         </CardHeader>
@@ -84,15 +86,23 @@ export function AccessGate({ children }: AccessGateProps) {
           <form className="space-y-3" onSubmit={submitPassword}>
             <Input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Digite a senha"
+              className="h-11 sm:h-8"
               required
             />
             {errorMessage ? (
-              <p className="text-sm text-destructive">{errorMessage}</p>
+              <p className="break-words text-sm text-destructive">
+                {errorMessage}
+              </p>
             ) : null}
-            <Button type="submit" disabled={isSubmitting} className="w-full">
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="min-h-11 w-full sm:min-h-8"
+            >
               {isSubmitting ? "Validando..." : "Entrar"}
             </Button>
           </form>

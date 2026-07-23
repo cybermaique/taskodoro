@@ -702,27 +702,27 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
   if (focusModeOpen && selectedTask) {
     return (
-      <main className="min-h-screen bg-zinc-950 p-4 text-white md:p-8">
-        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_420px]">
-          <section className="rounded-[28px] border border-white/10 bg-white/[0.06] p-5">
+      <main className="focus-safe-insets min-h-svh overflow-x-clip bg-zinc-950 text-white">
+        <div className="mx-auto grid w-full min-w-0 max-w-6xl gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <section className="order-2 min-w-0 rounded-3xl border border-white/10 bg-white/[0.06] p-4 sm:rounded-[28px] sm:p-5 lg:order-1">
             <Button
               variant="ghost"
-              className="mb-6 text-white hover:bg-white/10"
+              className="mb-5 min-h-11 max-w-full justify-start whitespace-normal text-left text-white hover:bg-white/10 sm:mb-6 sm:min-h-8"
               onClick={() => setFocusModeOpen(false)}
             >
               <ArrowLeft className="size-4" />
               Voltar para lista
             </Button>
             <p className="text-sm uppercase text-teal-200/70">Modo foco</p>
-            <h1 className="mt-2 text-4xl font-semibold">
+            <h1 className="mt-2 break-words text-3xl font-semibold leading-tight sm:text-4xl">
               {selectedTask.title}
             </h1>
             {selectedTask.description ? (
-              <p className="mt-4 max-w-2xl text-white/60">
+              <p className="mt-4 max-w-2xl break-words text-white/60">
                 {selectedTask.description}
               </p>
             ) : null}
-            <div className="mt-8 space-y-3">
+            <div className="mt-6 space-y-3 sm:mt-8">
               <h2 className="text-sm font-semibold uppercase text-white/50">
                 Subtarefas
               </h2>
@@ -730,18 +730,22 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 selectedTask.subtasks.map((subtask) => (
                   <label
                     key={subtask.id}
-                    className="flex items-center gap-3 rounded-2xl bg-white/10 p-3"
+                    className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/10 p-3"
                   >
                     <Checkbox
+                      className="shrink-0"
                       checked={subtask.is_completed}
                       onCheckedChange={() =>
                         toggleSubtask(subtask.id, !subtask.is_completed)
                       }
                     />
                     <span
-                      className={
-                        subtask.is_completed ? "text-white/35 line-through" : ""
-                      }
+                      className={[
+                        "min-w-0 break-words",
+                        subtask.is_completed
+                          ? "text-white/35 line-through"
+                          : "",
+                      ].join(" ")}
                     >
                       {subtask.title}
                     </span>
@@ -753,9 +757,9 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 </p>
               )}
             </div>
-            <div className="mt-8 flex flex-wrap gap-2">
+            <div className="mt-6 grid gap-2 sm:mt-8 sm:flex sm:flex-wrap">
               <Button
-                className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300"
+                className="min-h-11 w-full bg-emerald-400 text-emerald-950 hover:bg-emerald-300 sm:min-h-8 sm:w-auto"
                 onClick={() =>
                   updateTaskWithBusy(selectedTask.id, { status: "completed" })
                 }
@@ -765,7 +769,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               </Button>
               <Button
                 variant="outline"
-                className="border-white/10 bg-white/10 text-white hover:bg-white/15"
+                className="min-h-11 w-full border-white/10 bg-white/10 text-white hover:bg-white/15 sm:min-h-8 sm:w-auto"
                 onClick={() =>
                   updateTaskWithBusy(selectedTask.id, { status: "in_progress" })
                 }
@@ -774,31 +778,36 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               </Button>
             </div>
           </section>
-          {pomodoroPanel}
+          <div className="order-1 min-w-0 lg:order-2">{pomodoroPanel}</div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-5 pt-2 md:px-8 md:pb-7 md:pt-3">
-        <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="space-y-3">
+    <main className="min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
+      <div className="dashboard-safe-insets mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4 sm:gap-6">
+        <header
+          className={[
+            "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
+            isCompact ? "gap-0 sm:gap-4" : "",
+          ].join(" ")}
+        >
+          <div className={isCompact ? "hidden" : "min-w-0 space-y-3"}>
             {!isCompact ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-xs font-semibold uppercase text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white/60">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase leading-tight text-slate-600 shadow-sm sm:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white/60">
                 <Target className="size-3.5" />
-                Foco pessoal e profissional
+                <span className="min-w-0">Foco pessoal e profissional</span>
               </div>
             ) : null}
             <div>
               {!isCompact ? (
-                <h1 className="text-4xl font-semibold leading-none md:text-5xl">
+                <h1 className="break-words text-3xl font-semibold leading-none sm:text-4xl md:text-5xl">
                   {APP_TITLE}
                 </h1>
               ) : null}
               {!isCompact ? (
-                <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-white/55">
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-white/55">
                   Organize prioridades, quebre tarefas em passos menores e
                   mantenha o ritmo com Pomodoro.
                 </p>
@@ -808,8 +817,9 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
           <div
             className={[
-              "flex items-center gap-2 justify-self-start lg:justify-self-end",
-              isCompact ? "hidden" : "",
+              isCompact
+                ? "flex w-full items-center justify-end gap-2 sm:hidden"
+                : "flex w-full flex-wrap items-center justify-between gap-2 justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
             ].join(" ")}
           >
             {!isCompact ? (
@@ -826,12 +836,12 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 />
               </>
             ) : null}
-            <div className="flex rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
+            <div className="flex shrink-0 rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
               <Button
                 type="button"
                 size="sm"
                 variant={displayMode === "full" ? "default" : "ghost"}
-                className="h-8 rounded-full px-3"
+                className="h-11 rounded-full px-3 sm:h-8"
                 onClick={() => setDisplayMode("full")}
               >
                 Completo
@@ -840,7 +850,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 type="button"
                 size="sm"
                 variant={displayMode === "compact" ? "default" : "ghost"}
-                className="h-8 rounded-full px-3"
+                className="h-11 rounded-full px-3 sm:h-8"
                 onClick={() => setDisplayMode("compact")}
               >
                 Compacto
@@ -880,24 +890,42 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         <Tabs
           value={selectedTab}
           onValueChange={(value) => setSelectedTab(value as DashboardTab)}
-          className="gap-4"
+          className="min-w-0 gap-3 sm:gap-4"
         >
-          <TabsList className="h-10 w-full justify-start rounded-2xl border border-slate-900/10 bg-white/70 p-1 dark:border-white/10 dark:bg-white/10">
-            <TabsTrigger value="task-form" className="h-8 rounded-xl px-3">
+          <TabsList
+            className="sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
+            style={{ top: "max(0.5rem, var(--safe-area-top))" }}
+          >
+            <TabsTrigger
+              value="task-form"
+              aria-label="Nova tarefa"
+              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+            >
               <CircleDot className="size-4" />
-              Nova tarefa
+              <span className="sm:hidden">Criar</span>
+              <span className="hidden sm:inline">Nova tarefa</span>
             </TabsTrigger>
-            <TabsTrigger value="execution" className="h-8 rounded-xl px-3">
+            <TabsTrigger
+              value="execution"
+              aria-label="Tarefas e foco"
+              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+            >
               <ListTodo className="size-4" />
-              Tarefas e foco
+              <span className="sm:hidden">Foco</span>
+              <span className="hidden sm:inline">Tarefas e foco</span>
             </TabsTrigger>
-            <TabsTrigger value="notes" className="h-8 rounded-xl px-3">
+            <TabsTrigger
+              value="notes"
+              aria-label="Anotações"
+              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+            >
               <StickyNote className="size-4" />
-              Anotações
+              <span className="sm:hidden">Notas</span>
+              <span className="hidden sm:inline">Anotações</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="task-form">
+          <TabsContent value="task-form" className="min-w-0">
             <TaskForm
               isSubmitting={creatingTask}
               isCompact={isCompact}
@@ -906,16 +934,16 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             />
           </TabsContent>
 
-          <TabsContent value="execution">
-            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+          <TabsContent value="execution" className="min-w-0">
+            <section className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
               <div
                 className={[
-                  "order-2 lg:order-1",
+                  "order-2 min-w-0 lg:order-1",
                   isCompact ? "space-y-0" : "space-y-5",
                 ].join(" ")}
               >
                 {!isCompact ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                     <MiniMetric
                       title="Hoje"
                       value={dashboardStats.dueToday}
@@ -940,10 +968,10 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 ) : null}
 
                 {!isCompact ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid gap-2 sm:flex sm:flex-wrap">
                     <Button
                       variant="outline"
-                      className="rounded-full"
+                      className="min-h-11 w-full rounded-full sm:min-h-8 sm:w-auto"
                       onClick={() => setFocusModeOpen(Boolean(selectedTask))}
                       disabled={!selectedTask}
                     >
@@ -952,7 +980,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                     </Button>
                     <Button
                       variant="outline"
-                      className="rounded-full"
+                      className="min-h-11 w-full rounded-full whitespace-normal sm:min-h-8 sm:w-auto"
                       onClick={moveTodayToTomorrow}
                     >
                       <MoveRight className="size-4" />
@@ -977,17 +1005,19 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 />
               </div>
 
-              <div className="order-1 lg:order-2">{pomodoroPanel}</div>
+              <div className="order-1 min-w-0 lg:order-2">
+                {pomodoroPanel}
+              </div>
             </section>
           </TabsContent>
 
-          <TabsContent value="notes">
+          <TabsContent value="notes" className="min-w-0">
             <NotesPanel initialNotes={initialNotes} />
           </TabsContent>
         </Tabs>
 
         {isCompact ? (
-          <div className="mt-2 flex items-center justify-end gap-2">
+          <div className="mt-2 hidden items-center justify-end gap-2 sm:flex">
             <div className="flex rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
               <Button
                 type="button"
@@ -1044,13 +1074,15 @@ function MiniMetric({
   caption: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.06]">
+    <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.06]">
       <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">
         {title}
       </p>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <strong className="text-2xl leading-none">{value}</strong>
-        <span className="text-right text-xs text-slate-500 dark:text-white/45">
+      <div className="mt-2 min-w-0 sm:flex sm:items-end sm:justify-between sm:gap-3">
+        <strong className="block break-words text-xl leading-none sm:text-2xl">
+          {value}
+        </strong>
+        <span className="mt-1 block break-words text-left text-xs text-slate-500 sm:mt-0 sm:text-right dark:text-white/45">
           {caption}
         </span>
       </div>

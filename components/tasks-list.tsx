@@ -14,6 +14,7 @@ import {
   CalendarClock,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
   Circle,
   CirclePlus,
   GripVertical,
@@ -63,6 +64,7 @@ interface TasksListProps {
 
 type PriorityFilter = "all" | TaskPriority;
 type DueBucket = "overdue" | "today" | "week" | "later" | "none";
+type TaskSection = DueBucket | "completed";
 
 const taskStatusStorageKey = "taskodoro_task_status_filter";
 const taskViewStorageKey = "taskodoro_task_view_filter";
@@ -183,22 +185,26 @@ function getDueBucket(dueDate: string | null): DueBucket {
 }
 
 const bucketOrder: DueBucket[] = ["overdue", "today", "week", "later", "none"];
+const taskSectionOrder: TaskSection[] = [...bucketOrder, "completed"];
 
-const bucketLabels: Record<DueBucket, string> = {
+const bucketLabels: Record<TaskSection, string> = {
   overdue: "Vencidas",
   today: "Hoje",
   week: "Semana",
   later: "Depois",
   none: "Sem prazo",
+  completed: "Concluídas",
 };
 
-const bucketStyles: Record<DueBucket, string> = {
+const bucketStyles: Record<TaskSection, string> = {
   overdue: "border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-200",
   today: "border-teal-500 bg-teal-500/10 text-teal-700 dark:text-teal-200",
   week: "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-200",
   later:
     "border-violet-500 bg-violet-500/10 text-violet-700 dark:text-violet-200",
   none: "border-slate-400 bg-slate-500/10 text-slate-600 dark:text-white/60",
+  completed:
+    "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
 };
 
 const taskOrderStorageKey = "taskodoro_task_order";
@@ -283,6 +289,7 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [completedTasksExpanded, setCompletedTasksExpanded] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -292,7 +299,6 @@ export function TasksList({
         storedStatus === "all" ||
         storedStatus === "pending" ||
         storedStatus === "in_progress" ||
-        storedStatus === "completed" ||
         storedStatus === "canceled"
       ) {
         setStatusFilter(storedStatus as TaskFilter);
@@ -307,8 +313,7 @@ export function TasksList({
         storedView === "backlog" ||
         storedView === "work" ||
         storedView === "personal" ||
-        storedView === "travel" ||
-        storedView === "completed";
+        storedView === "travel";
 
       if (isValidTaskView) {
         setViewFilter(storedView as TaskView);
@@ -463,10 +468,6 @@ export function TasksList({
         return false;
       }
 
-      if (viewFilter === "completed" && task.status !== "completed") {
-        return false;
-      }
-
       if (priorityFilter !== "all" && task.priority !== priorityFilter) {
         return false;
       }
@@ -504,20 +505,34 @@ export function TasksList({
   ]);
 
   const groupedTasks = useMemo(() => {
-    const groups: Record<DueBucket, Task[]> = {
+    const groups: Record<TaskSection, Task[]> = {
       overdue: [],
       today: [],
       week: [],
       later: [],
       none: [],
+      completed: [],
     };
 
     for (const task of filteredTasks) {
-      groups[getDueBucket(task.due_date)].push(task);
+      if (task.status === "completed") {
+        groups.completed.push(task);
+      } else {
+        groups[getDueBucket(task.due_date)].push(task);
+      }
     }
+
+    groups.completed.sort(
+      (left, right) =>
+        new Date(right.completed_at ?? right.updated_at).getTime() -
+        new Date(left.completed_at ?? left.updated_at).getTime(),
+    );
 
     return groups;
   }, [filteredTasks]);
+
+  const visibleTaskCount =
+    filteredTasks.length - groupedTasks.completed.length;
 
   const startEdit = (task: Task) => {
     setEditingTaskId(task.id);
@@ -680,13 +695,16 @@ export function TasksList({
   };
 
   return (
-    <section className="space-y-4">
-      <div className="rounded-3xl border border-slate-900/10 bg-white/80 p-4 shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.07]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+    <section className="min-w-0 space-y-4">
+      <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold">Tarefas</h2>
             <p className="text-sm text-slate-500 dark:text-white/45">
-              {filteredTasks.length} de {tasks.length} na visão atual
+              {visibleTaskCount} visíveis
+              {groupedTasks.completed.length > 0
+                ? ` · ${groupedTasks.completed.length} concluídas ocultas`
+                : ""}
             </p>
           </div>
 
@@ -694,21 +712,31 @@ export function TasksList({
             <Tabs
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value as TaskFilter)}
+              className="w-full min-w-0 touch-pan-x overflow-x-auto pb-1 [scrollbar-width:none] md:w-auto md:pb-0 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             >
-              <TabsList className="grid w-full min-w-96 grid-cols-5 rounded-full bg-slate-950/[0.06] p-1 dark:bg-white/10">
-                <TabsTrigger value="all" className="rounded-full">
+              <TabsList className="grid w-80 min-w-80 grid-cols-4 rounded-full bg-slate-950/[0.06] p-1 group-data-horizontal/tabs:h-12 md:group-data-horizontal/tabs:h-8 dark:bg-white/10">
+                <TabsTrigger
+                  value="all"
+                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                >
                   Todas
                 </TabsTrigger>
-                <TabsTrigger value="pending" className="rounded-full">
+                <TabsTrigger
+                  value="pending"
+                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                >
                   Pendentes
                 </TabsTrigger>
-                <TabsTrigger value="in_progress" className="rounded-full">
+                <TabsTrigger
+                  value="in_progress"
+                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                >
                   Andamento
                 </TabsTrigger>
-                <TabsTrigger value="completed" className="rounded-full">
-                  Feitas
-                </TabsTrigger>
-                <TabsTrigger value="canceled" className="rounded-full">
+                <TabsTrigger
+                  value="canceled"
+                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                >
                   Canceladas
                 </TabsTrigger>
               </TabsList>
@@ -716,7 +744,7 @@ export function TasksList({
           ) : null}
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mt-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {[
             ["all", "Todas"],
             ["today", "Hoje"],
@@ -725,14 +753,13 @@ export function TasksList({
             ["work", "Trabalho"],
             ["personal", "Pessoal"],
             ["travel", "Viagem"],
-            ["completed", "Concluídas"],
           ].map(([value, label]) => (
             <Button
               key={value}
               type="button"
               size="sm"
               variant={viewFilter === value ? "default" : "outline"}
-              className="rounded-full"
+              className="h-11 snap-start touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
               onClick={() => setViewFilter(value as TaskView)}
             >
               {label}
@@ -747,10 +774,10 @@ export function TasksList({
               : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.9fr]"
           }
         >
-          <label className="relative">
+          <label className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
-              className="h-10 rounded-2xl border-slate-900/10 bg-white pl-9 shadow-none dark:border-white/10 dark:bg-black/20"
+              className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar tarefa, categoria ou subtarefa"
@@ -764,7 +791,7 @@ export function TasksList({
                 setPriorityFilter((value ?? "all") as PriorityFilter)
               }
             >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none dark:border-white/10 dark:bg-black/20">
+              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none md:h-10 dark:border-white/10 dark:bg-black/20">
                 <span className="flex h-full items-center text-sm">
                   {priorityFilter === "all"
                     ? "Todas prioridades"
@@ -785,7 +812,7 @@ export function TasksList({
               value={categoryFilter}
               onValueChange={(value) => setCategoryFilter(value ?? "all")}
             >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none dark:border-white/10 dark:bg-black/20">
+              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none md:h-10 dark:border-white/10 dark:bg-black/20">
                 <span className="flex h-full items-center text-sm">
                   {categoryFilter === "all"
                     ? "Todas categorias"
@@ -806,7 +833,7 @@ export function TasksList({
       </div>
 
       {filteredTasks.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-900/15 bg-white/55 p-10 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white/55 p-6 text-center shadow-sm sm:rounded-3xl sm:p-10 dark:border-white/10 dark:bg-white/[0.04]">
           <CirclePlus className="mx-auto size-8 text-slate-400" />
           <p className="mt-3 font-medium">Nada por aqui nesta vista.</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
@@ -815,32 +842,74 @@ export function TasksList({
         </div>
       ) : (
         <div className="space-y-6">
-          {bucketOrder.map((bucket) => {
+          {taskSectionOrder.map((bucket) => {
             const tasksByBucket = groupedTasks[bucket];
+            const isCompletedSection = bucket === "completed";
 
             if (!tasksByBucket.length) {
               return null;
             }
 
             return (
-              <section key={bucket} className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`h-7 rounded-full border px-3 py-1 text-xs font-semibold ${bucketStyles[bucket]}`}
+              <section key={bucket} className="min-w-0 space-y-3">
+                {isCompletedSection ? (
+                  <button
+                    type="button"
+                    className="flex min-h-16 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
+                    aria-expanded={completedTasksExpanded}
+                    aria-controls="completed-tasks-list"
+                    onClick={() =>
+                      setCompletedTasksExpanded((expanded) => !expanded)
+                    }
                   >
-                    {bucketLabels[bucket]}
-                  </span>
-                  <div className="h-px flex-1 bg-slate-900/10 dark:bg-white/10" />
-                  <span className="text-xs text-slate-500 dark:text-white/45">
-                    {tasksByBucket.length}
-                  </span>
-                </div>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      <CheckCircle2 className="size-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">Concluídas</span>
+                      <span className="block text-xs text-slate-500 dark:text-white/45">
+                        {tasksByBucket.length}{" "}
+                        {tasksByBucket.length === 1
+                          ? "tarefa oculta"
+                          : "tarefas ocultas"}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={[
+                        "size-5 shrink-0 text-slate-500 transition-transform duration-200 dark:text-white/50",
+                        completedTasksExpanded ? "rotate-180" : "",
+                      ].join(" ")}
+                    />
+                  </button>
+                ) : (
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={`h-7 rounded-full border px-3 py-1 text-xs font-semibold ${bucketStyles[bucket]}`}
+                    >
+                      {bucketLabels[bucket]}
+                    </span>
+                    <div className="h-px flex-1 bg-slate-900/10 dark:bg-white/10" />
+                    <span className="text-xs text-slate-500 dark:text-white/45">
+                      {tasksByBucket.length}
+                    </span>
+                  </div>
+                )}
 
-                <ul
-                  className="space-y-3"
-                  onDragOver={(event) => handleDragOver(event)}
-                  onDrop={(event) => handleDropOnBucket(event, bucket)}
-                >
+                {!isCompletedSection || completedTasksExpanded ? (
+                  <ul
+                    id={isCompletedSection ? "completed-tasks-list" : undefined}
+                    className="min-w-0 space-y-3"
+                    onDragOver={
+                      isCompletedSection
+                        ? undefined
+                        : (event) => handleDragOver(event)
+                    }
+                    onDrop={
+                      isCompletedSection
+                        ? undefined
+                        : (event) => handleDropOnBucket(event, bucket)
+                    }
+                  >
                   {tasksByBucket.map((task) => {
                     const isCompleted = task.status === "completed";
                     const isActive = task.id === selectedTaskId;
@@ -865,7 +934,7 @@ export function TasksList({
                     return (
                       <li
                         key={task.id}
-                        draggable={!isEditing}
+                        draggable={!isEditing && !isCompleted}
                         onDragStart={(event) => handleDragStart(event, task.id)}
                         onDragEnd={handleDragEnd}
                         onDragOver={(event) => handleDragOver(event, task.id)}
@@ -879,8 +948,8 @@ export function TasksList({
                           )
                         }
                         className={[
-                          "group border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
-                          !isEditing
+                          "group min-w-0 border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                          !isEditing && !isCompleted
                             ? "cursor-grab active:cursor-grabbing"
                             : "",
                           draggingTaskId === task.id
@@ -890,17 +959,19 @@ export function TasksList({
                           draggingTaskId !== task.id
                             ? "ring-2 ring-teal-400/60"
                             : "",
-                          isCompact ? "rounded-2xl p-2.5" : "rounded-3xl p-4",
+                          isCompact
+                            ? "rounded-2xl p-2.5"
+                            : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
                           isCompleted
                             ? "border-emerald-500/25"
                             : "border-slate-900/10 dark:border-white/10",
                           isActive ? "ring-2 ring-teal-400/70" : "",
                         ].join(" ")}
                       >
-                        <div className="grid gap-4 md:grid-cols-[auto_auto_1fr_auto] md:items-start">
+                        <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 md:grid-cols-[auto_auto_minmax(0,1fr)_auto] md:gap-4">
                           <button
                             type="button"
-                            className="inline-flex size-8 self-center cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing dark:hover:bg-white/10 dark:hover:text-white/70"
+                            className="col-start-1 row-start-2 inline-flex size-11 touch-manipulation self-center cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing md:col-start-1 md:row-start-1 md:size-8 dark:hover:bg-white/10 dark:hover:text-white/70"
                             aria-label="Arrastar tarefa"
                             aria-grabbed={draggingTaskId === task.id}
                             title="Arrastar tarefa"
@@ -913,12 +984,12 @@ export function TasksList({
                             onCheckedChange={() => onToggleTask(task)}
                             disabled={isBusy}
                             aria-label="Concluir tarefa"
-                            className="mt-1"
+                            className="col-start-2 row-start-2 size-5 self-center after:-inset-3 md:col-start-2 md:row-start-1 md:mt-1 md:size-4 md:self-start md:after:-inset-x-3 md:after:-inset-y-2"
                           />
 
                           <div
                             className={[
-                              "min-w-0",
+                              "col-span-3 col-start-1 row-start-1 min-w-0 md:col-span-1 md:col-start-3 md:row-start-1",
                               isCompact ? "space-y-2" : "space-y-3",
                             ].join(" ")}
                           >
@@ -958,8 +1029,8 @@ export function TasksList({
                                     <p
                                       className={[
                                         isCompact
-                                          ? "text-base font-semibold leading-snug"
-                                          : "text-lg font-semibold leading-snug",
+                                          ? "break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]"
+                                          : "break-words text-lg font-semibold leading-snug [overflow-wrap:anywhere]",
                                         isCompleted
                                           ? "text-slate-400 line-through dark:text-white/35"
                                           : "",
@@ -968,7 +1039,7 @@ export function TasksList({
                                       {task.title}
                                     </p>
                                     {!isCompact && task.description ? (
-                                      <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
+                                      <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere] dark:text-white/45">
                                         {task.description}
                                       </p>
                                     ) : null}
@@ -981,7 +1052,7 @@ export function TasksList({
                                   ) : null}
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                   <Badge
                                     variant={
                                       isCompleted ? "secondary" : "default"
@@ -995,7 +1066,11 @@ export function TasksList({
                                     {getPriorityLabel(task.priority)}
                                   </Badge>
                                   {task.category ? (
-                                    <Badge variant="outline">
+                                    <Badge
+                                      variant="outline"
+                                      className="max-w-full truncate"
+                                      title={task.category}
+                                    >
                                       {task.category}
                                     </Badge>
                                   ) : null}
@@ -1056,7 +1131,7 @@ export function TasksList({
                             </div>
 
                             {isCompact && hasSubtasks ? (
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
                                 <span>
                                   Subtarefas {completedSubtasks}/
                                   {task.subtasks.length}
@@ -1070,7 +1145,7 @@ export function TasksList({
                                 {shouldSuggestComplete ? (
                                   <Button
                                     size="sm"
-                                    className="h-7 rounded-full bg-emerald-500 px-3 text-xs text-white hover:bg-emerald-600"
+                                    className="h-11 touch-manipulation rounded-full bg-emerald-500 px-4 text-xs text-white md:h-7 md:px-3 hover:bg-emerald-600"
                                     onClick={async () => {
                                       await onUpdateTask(task.id, {
                                         status: "completed",
@@ -1089,14 +1164,14 @@ export function TasksList({
                                 isCompact ? "hidden" : "",
                               ].join(" ")}
                             >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                   <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">
                                     Subtarefas {completedSubtasks}/
                                     {task.subtasks.length}
                                   </p>
                                   {hasSubtasks ? (
-                                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
+                                    <div className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-slate-900/10 sm:w-24 sm:flex-none dark:bg-white/10">
                                       <div
                                         className="h-full rounded-full bg-teal-500"
                                         style={{ width: `${subtaskPercent}%` }}
@@ -1108,7 +1183,7 @@ export function TasksList({
                                 {shouldSuggestComplete ? (
                                   <Button
                                     size="sm"
-                                    className="rounded-full bg-emerald-500 text-white hover:bg-emerald-600"
+                                    className="h-11 touch-manipulation rounded-full bg-emerald-500 px-4 text-white md:h-7 md:px-2.5 hover:bg-emerald-600"
                                     onClick={async () => {
                                       await onUpdateTask(task.id, {
                                         status: "completed",
@@ -1126,9 +1201,9 @@ export function TasksList({
                                   {task.subtasks.map((subtask) => (
                                     <li
                                       key={subtask.id}
-                                      className="flex items-center justify-between gap-2 rounded-xl bg-white/70 px-2 py-1.5 dark:bg-black/20"
+                                      className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-white/70 px-2 py-1.5 dark:bg-black/20"
                                     >
-                                      <label className="flex min-w-0 items-center gap-2">
+                                      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
                                         <Checkbox
                                           checked={subtask.is_completed}
                                           onCheckedChange={() =>
@@ -1137,6 +1212,7 @@ export function TasksList({
                                               !subtask.is_completed,
                                             )
                                           }
+                                          className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
                                         />
                                         <span
                                           className={[
@@ -1154,6 +1230,7 @@ export function TasksList({
                                         type="button"
                                         size="icon-sm"
                                         variant="ghost"
+                                        className="size-11 touch-manipulation md:size-7"
                                         onClick={() =>
                                           onDeleteSubtask(subtask.id)
                                         }
@@ -1175,10 +1252,10 @@ export function TasksList({
                                 onSubmit={(event) =>
                                   submitSubtask(event, task.id)
                                 }
-                                className="flex gap-2"
+                                className="flex min-w-0 flex-col gap-2 sm:flex-row"
                               >
                                 <Input
-                                  className="h-9 rounded-xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+                                  className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
                                   value={subtaskDraftByTaskId[task.id] ?? ""}
                                   onChange={(event) =>
                                     setSubtaskDraftByTaskId((current) => ({
@@ -1192,7 +1269,7 @@ export function TasksList({
                                 <Button
                                   type="submit"
                                   variant="outline"
-                                  className="h-9 rounded-xl"
+                                  className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
                                 >
                                   <CirclePlus className="size-4" />
                                   Adicionar
@@ -1203,16 +1280,21 @@ export function TasksList({
 
                           <div
                             className={[
-                              "flex self-center justify-end gap-1.5",
+                              "gap-2 md:gap-1.5",
                               isCompact
-                                ? "items-center md:flex-row"
-                                : "items-center md:flex-col",
+                                ? "col-start-3 row-start-2 flex flex-wrap items-center justify-end md:col-start-4 md:row-start-1 md:flex-row"
+                                : "col-span-3 col-start-1 row-start-3 grid grid-cols-2 self-stretch [&>button]:w-full md:col-span-1 md:col-start-4 md:row-start-1 md:flex md:self-center md:items-center md:justify-end md:[&>button]:w-auto md:flex-col",
                             ].join(" ")}
                           >
                             <Button
                               type="button"
                               size={isCompact ? "icon-sm" : "icon"}
                               variant="ghost"
+                              className={
+                                isCompact
+                                  ? "size-11 touch-manipulation md:size-7"
+                                  : "size-11 touch-manipulation md:size-8"
+                              }
                               onClick={() => startEdit(task)}
                               disabled={Boolean(isEditing)}
                               aria-label="Editar tarefa"
@@ -1223,6 +1305,11 @@ export function TasksList({
                               type="button"
                               size={isCompact ? "icon-sm" : "icon"}
                               variant="ghost"
+                              className={
+                                isCompact
+                                  ? "size-11 touch-manipulation md:size-7"
+                                  : "size-11 touch-manipulation md:size-8"
+                              }
                               onClick={() => onDeleteTask(task.id)}
                               disabled={isBusy}
                               aria-label="Excluir tarefa"
@@ -1234,8 +1321,8 @@ export function TasksList({
                               size={isCompact ? "xs" : "sm"}
                               className={
                                 isActive
-                                  ? "h-7 rounded-full bg-teal-500 px-2 text-xs text-white hover:bg-teal-600"
-                                  : "h-7 rounded-full px-2 text-xs"
+                                  ? "h-11 min-w-14 touch-manipulation rounded-full bg-teal-500 px-3 text-xs text-white md:h-7 md:min-w-0 md:px-2 hover:bg-teal-600"
+                                  : "h-11 min-w-14 touch-manipulation rounded-full px-3 text-xs md:h-7 md:min-w-0 md:px-2"
                               }
                               variant={isActive ? "default" : "outline"}
                               onClick={() =>
@@ -1251,7 +1338,7 @@ export function TasksList({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="rounded-full"
+                                className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
                                 onClick={() =>
                                   onUpdateTask(task.id, {
                                     status: "in_progress",
@@ -1266,7 +1353,7 @@ export function TasksList({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="rounded-full"
+                                className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
                                 onClick={() =>
                                   onUpdateTask(task.id, { status: "pending" })
                                 }
@@ -1278,7 +1365,7 @@ export function TasksList({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="rounded-full"
+                                className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
                                 onClick={() =>
                                   onUpdateTask(task.id, { status: "canceled" })
                                 }
@@ -1291,7 +1378,8 @@ export function TasksList({
                       </li>
                     );
                   })}
-                </ul>
+                  </ul>
+                ) : null}
               </section>
             );
           })}
@@ -1319,9 +1407,9 @@ function TaskEditForm({
   onCancel: () => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <Input
-        className="h-10 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+        className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
         value={editingState.title}
         onChange={(event) =>
           setEditingState((current) =>
@@ -1331,7 +1419,7 @@ function TaskEditForm({
         maxLength={120}
       />
 
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-3">
         <Select
           value={editingState.priority}
           onValueChange={(value) =>
@@ -1345,7 +1433,7 @@ function TaskEditForm({
             )
           }
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none dark:border-white/10 dark:bg-black/20">
+          <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20">
             <span className="flex h-full items-center text-sm">
               {getPriorityLabel(editingState.priority)}
             </span>
@@ -1358,7 +1446,7 @@ function TaskEditForm({
         </Select>
 
         <Input
-          className="h-10 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
           value={editingState.category}
           onChange={(event) =>
             setEditingState((current) =>
@@ -1370,7 +1458,7 @@ function TaskEditForm({
         />
 
         <Input
-          className="h-10 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
           type="date"
           value={editingState.due_date}
           onChange={(event) =>
@@ -1381,7 +1469,7 @@ function TaskEditForm({
         />
 
         <Input
-          className="h-10 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
           type="date"
           value={editingState.planned_for}
           onChange={(event) =>
@@ -1394,7 +1482,7 @@ function TaskEditForm({
         />
 
         <Input
-          className="h-10 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
           type="number"
           min={1}
           value={editingState.estimated_minutes}
@@ -1421,7 +1509,7 @@ function TaskEditForm({
             )
           }
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none dark:border-white/10 dark:bg-black/20">
+          <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20">
             <span className="flex h-full items-center text-sm">
               {getRecurrenceLabel(editingState.recurrence)}
             </span>
@@ -1436,13 +1524,19 @@ function TaskEditForm({
       </div>
 
       <div className="flex gap-2">
-        <Button size="sm" className="rounded-full" onClick={onSave}>
+        <Button
+          type="button"
+          size="sm"
+          className="h-11 flex-1 touch-manipulation rounded-full px-4 sm:h-7 sm:flex-none sm:px-2.5"
+          onClick={onSave}
+        >
           Salvar
         </Button>
         <Button
+          type="button"
           size="sm"
           variant="outline"
-          className="rounded-full"
+          className="h-11 flex-1 touch-manipulation rounded-full px-4 sm:h-7 sm:flex-none sm:px-2.5"
           onClick={onCancel}
         >
           Cancelar
