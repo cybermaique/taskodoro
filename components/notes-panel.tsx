@@ -52,7 +52,7 @@ function TagChip({ tag, active, onClick }: TagChipProps) {
       type="button"
       onClick={onClick}
       className={[
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+        "inline-flex min-h-11 max-w-full items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors sm:min-h-0 sm:px-2.5 sm:py-0.5",
         active
           ? "bg-violet-500 text-white"
           : "bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:hover:bg-violet-800/60",
@@ -60,7 +60,7 @@ function TagChip({ tag, active, onClick }: TagChipProps) {
       ].join(" ")}
     >
       <Hash className="size-3 shrink-0" />
-      {tag.replace(/^#/, "")}
+      <span className="truncate">{tag.replace(/^#/, "")}</span>
     </button>
   );
 }
@@ -167,19 +167,21 @@ function NoteCard({
   return (
     <div
       className={[
-        "group relative rounded-2xl border bg-white/70 p-4 shadow-sm backdrop-blur transition-shadow hover:shadow-md",
+        "group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-shadow hover:shadow-md sm:p-4",
         "dark:bg-white/[0.05] dark:border-white/10",
         deleting ? "opacity-50 pointer-events-none" : "",
       ].join(" ")}
     >
       {/* actions */}
-      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="-mr-1 -mt-1 mb-1 flex items-center justify-end gap-1 opacity-100 transition-opacity sm:absolute sm:right-3 sm:top-3 sm:m-0 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
         {!editing && (
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="size-7 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            className="size-11 rounded-xl text-slate-500 hover:text-slate-700 sm:size-7 sm:text-slate-400 dark:hover:text-white"
+            aria-label="Editar anotação"
+            title="Editar anotação"
             onClick={() => {
               setDraft(note.content);
               setEditing(true);
@@ -192,7 +194,9 @@ function NoteCard({
           type="button"
           size="icon"
           variant="ghost"
-          className="size-7 rounded-xl text-slate-400 hover:text-red-500"
+          className="size-11 rounded-xl text-slate-500 hover:text-red-500 sm:size-7 sm:text-slate-400"
+          aria-label="Excluir anotação"
+          title="Excluir anotação"
           onClick={handleDelete}
           disabled={deleting}
         >
@@ -208,13 +212,13 @@ function NoteCard({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="min-h-[80px] resize-none rounded-xl border-violet-300 bg-white text-sm focus-visible:ring-violet-400 dark:bg-white/10 dark:border-white/20"
+            className="min-h-24 resize-none rounded-xl border-violet-300 bg-white text-base focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:bg-white/10 dark:border-white/20"
             rows={3}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              className="h-7 rounded-full bg-violet-600 px-3 text-xs text-white hover:bg-violet-700"
+              className="h-11 flex-1 rounded-full bg-violet-600 px-4 text-sm text-white hover:bg-violet-700 sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
               onClick={handleSave}
               disabled={saving || !draft.trim()}
             >
@@ -223,7 +227,7 @@ function NoteCard({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 rounded-full px-3 text-xs"
+              className="h-11 flex-1 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
               onClick={() => {
                 setEditing(false);
                 setDraft(note.content);
@@ -231,14 +235,14 @@ function NoteCard({
             >
               Cancelar
             </Button>
-            <span className="ml-auto text-xs text-slate-400">
+            <span className="ml-auto hidden text-xs text-slate-400 sm:inline">
               Ctrl+Enter para salvar · Esc para cancelar
             </span>
           </div>
         </div>
       ) : (
         <p
-          className="whitespace-pre-wrap break-words pr-10 text-sm leading-relaxed text-slate-800 dark:text-white/85"
+          className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800 [overflow-wrap:anywhere] sm:pr-10 dark:text-white/85"
           onDoubleClick={() => {
             setDraft(note.content);
             setEditing(true);
@@ -263,7 +267,7 @@ function NoteCard({
               ))}
             </>
           )}
-          <div className="ml-auto flex items-center gap-1 text-xs text-slate-400 dark:text-white/35">
+          <div className="flex w-full items-center justify-end gap-1 text-xs text-slate-400 sm:ml-auto sm:w-auto dark:text-white/35">
             <Clock className="size-3" />
             <span>{formatRelative(note.updated_at)}</span>
           </div>
@@ -378,9 +382,9 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* compose */}
-      <div className="rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.05]">
+      <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
         <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-white/40">
           <StickyNote className="size-3.5" />
           Nova anotação
@@ -391,13 +395,13 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
-          className="min-h-[80px] resize-none rounded-xl border-slate-200 bg-white/50 text-sm leading-relaxed focus-visible:ring-violet-400 dark:border-white/10 dark:bg-white/10"
+          className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10"
           rows={3}
         />
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="h-8 gap-1.5 rounded-full bg-violet-600 px-4 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            className="h-11 min-w-0 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:h-8 sm:flex-none sm:text-xs"
             onClick={handleCreate}
             disabled={submitting || !draft.trim()}
           >
@@ -405,7 +409,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             {submitting ? "Salvando…" : "Salvar anotação"}
           </Button>
           {draft.trim() && (
-            <span className="text-xs text-slate-400">
+            <span className="hidden text-xs text-slate-400 sm:inline">
               Ctrl+Enter para salvar
             </span>
           )}
@@ -413,7 +417,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             <Button
               size="sm"
               variant="ghost"
-              className="ml-auto h-7 rounded-full px-3 text-xs"
+              className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:px-3 sm:text-xs"
               onClick={() => setDraft("")}
             >
               <X className="size-3" />
@@ -421,7 +425,11 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             </Button>
           )}
         </div>
-        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        {error && (
+          <p className="mt-2 break-words text-xs text-red-500 [overflow-wrap:anywhere]">
+            {error}
+          </p>
+        )}
       </div>
 
       {/* search + tag filters */}
@@ -433,13 +441,15 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar anotações…"
-              className="h-9 rounded-full border-slate-200 bg-white/70 pl-9 text-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+              className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 pr-12 text-base backdrop-blur sm:h-9 sm:pr-10 sm:text-sm dark:border-white/10 dark:bg-white/10"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-0 top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 sm:right-1 sm:size-9"
+                aria-label="Limpar busca"
+                title="Limpar busca"
               >
                 <X className="size-4" />
               </button>
@@ -447,7 +457,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           </div>
 
           {allTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <Tag className="size-3.5 shrink-0 text-slate-400" />
               {allTags.map((tag) => (
                 <TagChip
@@ -461,7 +471,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
                 <button
                   type="button"
                   onClick={() => setActiveTag(null)}
-                  className="ml-1 text-xs text-slate-400 underline hover:text-slate-600"
+                  className="ml-1 inline-flex min-h-11 items-center text-xs text-slate-400 underline hover:text-slate-600 sm:min-h-0"
                 >
                   limpar filtro
                 </button>
@@ -473,7 +483,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* notes list */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 py-14 text-center dark:border-white/15">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
           <StickyNote className="size-8 text-slate-300 dark:text-white/20" />
           <p className="text-sm text-slate-500 dark:text-white/40">
             {notes.length === 0

@@ -50,6 +50,10 @@
 }
 
 :root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -124,14 +128,75 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100%;
+    min-height: 100dvh;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
   }
   html {
     @apply font-sans;
+    min-height: 100%;
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   h1,
   h2,
   h3,
   h4 {
     font-family: var(--font-heading);
+  }
+  button,
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+    touch-action: manipulation;
+  }
+}
+
+@layer utilities {
+  .dashboard-safe-insets {
+    padding-top: max(0.5rem, var(--safe-area-top));
+    padding-right: max(1rem, var(--safe-area-right));
+    padding-bottom: max(1.25rem, var(--safe-area-bottom));
+    padding-left: max(1rem, var(--safe-area-left));
+  }
+
+  .focus-safe-insets {
+    padding-top: max(1rem, var(--safe-area-top));
+    padding-right: max(1rem, var(--safe-area-right));
+    padding-bottom: max(1rem, var(--safe-area-bottom));
+    padding-left: max(1rem, var(--safe-area-left));
+  }
+
+  .access-safe-insets {
+    padding-top: max(2.5rem, var(--safe-area-top));
+    padding-right: max(1rem, var(--safe-area-right));
+    padding-bottom: max(2.5rem, var(--safe-area-bottom));
+    padding-left: max(1rem, var(--safe-area-left));
+  }
+
+  .access-loading-safe-insets {
+    padding-top: max(5rem, var(--safe-area-top));
+    padding-right: max(1rem, var(--safe-area-right));
+    padding-bottom: max(1rem, var(--safe-area-bottom));
+    padding-left: max(1rem, var(--safe-area-left));
+  }
+}
+
+@media (min-width: 48rem) {
+  .dashboard-safe-insets {
+    padding-top: max(0.75rem, var(--safe-area-top));
+    padding-right: max(2rem, var(--safe-area-right));
+    padding-bottom: max(1.75rem, var(--safe-area-bottom));
+    padding-left: max(2rem, var(--safe-area-left));
+  }
+
+  .focus-safe-insets {
+    padding-top: max(2rem, var(--safe-area-top));
+    padding-right: max(2rem, var(--safe-area-right));
+    padding-bottom: max(2rem, var(--safe-area-bottom));
+    padding-left: max(2rem, var(--safe-area-left));
   }
 }
