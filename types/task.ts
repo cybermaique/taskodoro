@@ -52,8 +52,7 @@ export type TaskView =
   | "backlog"
   | "work"
   | "personal"
-  | "travel"
-  | "completed";
+  | "travel";
 
 export interface CreateTaskInput {
   title: string;

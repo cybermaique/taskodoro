@@ -54,7 +54,7 @@ const EMPTY_VALUES: TaskFormValues = {
 };
 
 const compactFieldClass =
-  "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white pl-10 pr-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20";
+  "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white pl-10 pr-3 text-base shadow-none sm:text-sm dark:border-white/10 dark:bg-black/20";
 const compactSelectClass =
   "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white py-0 pl-10 pr-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20";
 
@@ -142,10 +142,10 @@ export function TaskForm({
   };
 
   return (
-    <section className="rounded-3xl border border-slate-900/10 bg-white/80 p-4 shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+    <section className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20">
+      <form onSubmit={onSubmit} className="min-w-0 space-y-3 sm:space-y-4">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold">Nova tarefa</h2>
             {!isCompact ? (
               <p className="text-sm text-slate-500 dark:text-white/45">
@@ -153,7 +153,11 @@ export function TaskForm({
               </p>
             ) : null}
           </div>
-          <Button type="submit" disabled={isSubmitting} className="h-9 rounded-full px-4">
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-11 w-full touch-manipulation rounded-full px-4 sm:h-9 sm:w-auto"
+          >
             <Plus className="size-4" />
             {isSubmitting ? "Salvando" : "Adicionar"}
           </Button>
@@ -161,7 +165,7 @@ export function TaskForm({
 
         <div className="grid gap-3">
           <Input
-            className="h-12 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] text-base shadow-none dark:border-white/10 dark:bg-black/20"
+            className="h-12 min-w-0 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] text-base shadow-none dark:border-white/10 dark:bg-black/20"
             placeholder="Ex.: Escrever proposta comercial"
             value={values.title}
             onChange={(event) =>
@@ -347,7 +351,11 @@ export function TaskForm({
           ) : null}
         </div>
 
-        {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+        {errorMessage ? (
+          <p className="break-words text-sm text-destructive">
+            {errorMessage}
+          </p>
+        ) : null}
       </form>
     </section>
   );

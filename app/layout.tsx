@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
+import type { Viewport } from "next";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
@@ -23,6 +24,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -35,7 +43,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body
-        className="min-h-full bg-background text-foreground"
+        className="min-h-svh min-w-0 overflow-x-clip bg-background text-foreground"
         suppressHydrationWarning
       >
         <ThemeProvider>{children}</ThemeProvider>
