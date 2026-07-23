@@ -855,7 +855,7 @@ export function TasksList({
                 {isCompletedSection ? (
                   <button
                     type="button"
-                    className="flex min-h-16 w-full touch-manipulation items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
+                    className="flex min-h-16 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
                     aria-expanded={completedTasksExpanded}
                     aria-controls="completed-tasks-list"
                     onClick={() =>
