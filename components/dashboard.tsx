@@ -152,6 +152,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     sortByMostRecent(initialTasks),
   );
   const [creatingTask, setCreatingTask] = useState(false);
+  const [hasUnsavedTaskForm, setHasUnsavedTaskForm] = useState(false);
+  const [hasUnsavedTaskEdit, setHasUnsavedTaskEdit] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(
@@ -183,6 +185,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   const selectedTaskIdRef = useRef<string | null>(null);
   const alertToneIntervalRef = useRef<number | null>(null);
   const isCompact = displayMode === "compact";
+  const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
 
   const stopContinuousAlert = useCallback(() => {
     if (alertToneIntervalRef.current !== null) {
@@ -298,6 +301,18 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   useEffect(() => {
     window.localStorage.setItem("taskodoro_display_mode", displayMode);
   }, [displayMode]);
+
+  useEffect(() => {
+    if (!hasUnsavedTaskChanges) return;
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasUnsavedTaskChanges]);
 
   useEffect(() => {
     window.localStorage.setItem("taskodoro_selected_tab", selectedTab);
@@ -438,6 +453,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     recurrence?: TaskRecurrence;
     pomodoro_minutes?: number | null;
     break_minutes?: number | null;
+    attachments?: File[];
   }) => {
     setCreatingTask(true);
     setErrorMessage(null);
@@ -457,9 +473,24 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         throw new Error(data.error ?? "Não foi possível criar a tarefa.");
       }
 
-      setTasks((current) => upsertTask(current, data.task as Task));
+      let createdTask = data.task as Task;
+      for (const attachment of values.attachments ?? []) {
+        const formData = new FormData();
+        formData.append("file", attachment);
+        const uploadResponse = await fetch(`/api/tasks/${createdTask.id}/attachments`, {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = (await uploadResponse.json()) as { task?: Task; error?: string };
+        if (!uploadResponse.ok || !uploadData.task) {
+          throw new Error(uploadData.error ?? "A tarefa foi criada, mas não foi possível anexar um arquivo.");
+        }
+        createdTask = uploadData.task;
+      }
+
+      setTasks((current) => upsertTask(current, createdTask));
       if (!pomodoro.selectedTaskId) {
-        pomodoro.setSelectedTaskId(data.task.id);
+        pomodoro.setSelectedTaskId(createdTask.id);
       }
     } finally {
       setCreatingTask(false);
@@ -546,6 +577,43 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       setErrorMessage(
         error instanceof Error ? error.message : "Erro ao excluir tarefa.",
       );
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
+
+  const addTaskAttachment = async (taskId: string, file: File) => {
+    setBusyTaskId(taskId);
+    setErrorMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`/api/tasks/${taskId}/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json()) as { task?: Task; error?: string };
+      if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível anexar a imagem.");
+      setTasks((current) => upsertTask(current, data.task as Task));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Erro ao anexar imagem.");
+      throw error;
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
+
+  const deleteTaskAttachment = async (taskId: string, attachmentId: string) => {
+    setBusyTaskId(taskId);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/attachments/${attachmentId}`, { method: "DELETE" });
+      const data = (await response.json()) as { task?: Task; error?: string };
+      if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível excluir a imagem.");
+      setTasks((current) => upsertTask(current, data.task as Task));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Erro ao excluir imagem.");
+      throw error;
     } finally {
       setBusyTaskId(null);
     }
@@ -677,6 +745,19 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     if (task.break_minutes) {
       pomodoro.setBreakMinutes(task.break_minutes);
     }
+  };
+
+  const handleTabChange = (value: string) => {
+    const nextTab = value as DashboardTab;
+    if (
+      nextTab !== selectedTab &&
+      hasUnsavedTaskChanges &&
+      !window.confirm("Você tem alterações não salvas. Deseja continuar mesmo assim?")
+    ) {
+      return;
+    }
+
+    setSelectedTab(nextTab);
   };
 
   const pomodoroPanel = (
@@ -889,7 +970,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         ) : null}
         <Tabs
           value={selectedTab}
-          onValueChange={(value) => setSelectedTab(value as DashboardTab)}
+          onValueChange={handleTabChange}
           className="min-w-0 gap-3 sm:gap-4"
         >
           <TabsList
@@ -930,6 +1011,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               isSubmitting={creatingTask}
               isCompact={isCompact}
               categorySuggestions={categorySuggestions}
+              onDirtyChange={setHasUnsavedTaskForm}
               onCreate={createTask}
             />
           </TabsContent>
@@ -995,10 +1077,13 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                   busyTaskId={busyTaskId}
                   isCompact={isCompact}
                   categorySuggestions={categorySuggestions}
+                  onEditDirtyChange={setHasUnsavedTaskEdit}
                   onSelectTask={handleSelectTask}
                   onToggleTask={toggleTask}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
+                  onAddAttachment={addTaskAttachment}
+                  onDeleteAttachment={deleteTaskAttachment}
                   onCreateSubtask={createSubtask}
                   onToggleSubtask={toggleSubtask}
                   onDeleteSubtask={deleteSubtask}

@@ -21,6 +21,15 @@ export interface FocusSession {
   created_at: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  file_name: string;
+  mime_type: string;
+  storage_path: string;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -40,6 +49,7 @@ export interface Task {
   updated_at: string;
   pomodoro_minutes: number | null;
   break_minutes: number | null;
+  attachments: TaskAttachment[];
   subtasks: Subtask[];
   focus_sessions: FocusSession[];
 }

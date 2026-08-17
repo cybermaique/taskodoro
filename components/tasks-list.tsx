@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import {
-  DragEvent,
-  FormEvent,
-  MouseEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  type MouseEvent,
   type Dispatch,
   type SetStateAction,
   useEffect,
@@ -15,6 +16,8 @@ import {
   CalendarCheck,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   CirclePlus,
   GripVertical,
@@ -22,12 +25,18 @@ import {
   Repeat,
   Search,
   Trash2,
+  X,
+  ImageIcon,
+  ImagePlus,
+  FileText,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -38,6 +47,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type {
   Task,
+  TaskAttachment,
   TaskFilter,
   TaskPriority,
   TaskRecurrence,
@@ -50,6 +60,7 @@ interface TasksListProps {
   busyTaskId: string | null;
   isCompact?: boolean;
   categorySuggestions: string[];
+  onEditDirtyChange?: (isDirty: boolean) => void;
   onSelectTask: (taskId: string | null) => void;
   onToggleTask: (task: Task) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
@@ -57,6 +68,8 @@ interface TasksListProps {
     taskId: string,
     payload: Record<string, unknown>,
   ) => Promise<void>;
+  onAddAttachment: (taskId: string, file: File) => Promise<void>;
+  onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   onCreateSubtask: (taskId: string, title: string) => Promise<void>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
@@ -73,6 +86,7 @@ const taskCategoryStorageKey = "taskodoro_task_category_filter";
 
 interface EditingState {
   title: string;
+  description: string;
   category: string;
   due_date: string;
   planned_for: string;
@@ -266,10 +280,13 @@ export function TasksList({
   busyTaskId,
   isCompact = false,
   categorySuggestions,
+  onEditDirtyChange,
   onSelectTask,
   onToggleTask,
   onDeleteTask,
   onUpdateTask,
+  onAddAttachment,
+  onDeleteAttachment,
   onCreateSubtask,
   onToggleSubtask,
   onDeleteSubtask,
@@ -290,6 +307,10 @@ export function TasksList({
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [completedTasksExpanded, setCompletedTasksExpanded] = useState(false);
+  const [attachmentViewer, setAttachmentViewer] = useState<{
+    task: Task;
+    index: number;
+  } | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -538,6 +559,7 @@ export function TasksList({
     setEditingTaskId(task.id);
     setEditingState({
       title: task.title,
+      description: task.description ?? "",
       category: task.category ?? "",
       due_date: task.due_date ?? "",
       planned_for: task.planned_for ?? "",
@@ -934,9 +956,6 @@ export function TasksList({
                     return (
                       <li
                         key={task.id}
-                        draggable={!isEditing && !isCompleted}
-                        onDragStart={(event) => handleDragStart(event, task.id)}
-                        onDragEnd={handleDragEnd}
                         onDragOver={(event) => handleDragOver(event, task.id)}
                         onDrop={(event) => handleDropOnTask(event, task.id)}
                         onClick={(event) =>
@@ -949,9 +968,6 @@ export function TasksList({
                         }
                         className={[
                           "group min-w-0 border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
-                          !isEditing && !isCompleted
-                            ? "cursor-grab active:cursor-grabbing"
-                            : "",
                           draggingTaskId === task.id
                             ? "scale-[0.99] opacity-55"
                             : "",
@@ -971,6 +987,9 @@ export function TasksList({
                         <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 md:grid-cols-[auto_auto_minmax(0,1fr)_auto] md:gap-4">
                           <button
                             type="button"
+                            draggable={!isEditing && !isCompleted}
+                            onDragStart={(event) => handleDragStart(event, task.id)}
+                            onDragEnd={handleDragEnd}
                             className="col-start-1 row-start-2 inline-flex size-11 touch-manipulation self-center cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing md:col-start-1 md:row-start-1 md:size-8 dark:hover:bg-white/10 dark:hover:text-white/70"
                             aria-label="Arrastar tarefa"
                             aria-grabbed={draggingTaskId === task.id}
@@ -995,10 +1014,12 @@ export function TasksList({
                           >
                             {isEditing ? (
                               <TaskEditForm
+                                task={task}
                                 editingState={editingState}
                                 setEditingState={setEditingState}
                                 onCancel={cancelEdit}
-                                onSave={async () => {
+                                onDirtyChange={onEditDirtyChange}
+                                onSave={async ({ attachments, attachmentIdsToDelete }) => {
                                   const nextTitle = editingState.title.trim();
 
                                   if (!nextTitle) {
@@ -1007,6 +1028,8 @@ export function TasksList({
 
                                   await onUpdateTask(task.id, {
                                     title: nextTitle,
+                                    description:
+                                      editingState.description.trim() || null,
                                     priority: editingState.priority,
                                     category:
                                       editingState.category.trim() || null,
@@ -1019,6 +1042,12 @@ export function TasksList({
                                         : null,
                                     recurrence: editingState.recurrence,
                                   });
+                                  for (const attachmentId of attachmentIdsToDelete) {
+                                    await onDeleteAttachment(task.id, attachmentId);
+                                  }
+                                  for (const attachment of attachments) {
+                                    await onAddAttachment(task.id, attachment);
+                                  }
                                   cancelEdit();
                                 }}
                               />
@@ -1042,6 +1071,15 @@ export function TasksList({
                                       <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere] dark:text-white/45">
                                         {task.description}
                                       </p>
+                                    ) : null}
+                                    {task.attachments.length ? (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {sortAttachments(task.attachments).map((attachment, index) => (
+                                          <button key={attachment.id} type="button" onClick={() => setAttachmentViewer({ task: { ...task, attachments: sortAttachments(task.attachments) }, index })} className="group/image overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10" title={`Abrir ${attachment.file_name}`}>
+                                            <AttachmentPreview attachment={attachment} taskId={task.id} />
+                                          </button>
+                                        ))}
+                                      </div>
                                     ) : null}
                                   </div>
 
@@ -1073,6 +1111,9 @@ export function TasksList({
                                     >
                                       {task.category}
                                     </Badge>
+                                  ) : null}
+                                  {task.attachments.length ? (
+                                    <Badge variant="outline" className="gap-1"><ImageIcon className="size-3" /> {task.attachments.length}</Badge>
                                   ) : null}
                                   <Badge variant="outline" className="gap-1">
                                     <CalendarClock className="size-3" />
@@ -1391,23 +1432,218 @@ export function TasksList({
           <option key={category} value={category} />
         ))}
       </datalist>
+
+      <AttachmentViewer
+        viewer={attachmentViewer}
+        onClose={() => setAttachmentViewer(null)}
+        onChangeIndex={(index) =>
+          setAttachmentViewer((current) =>
+            current ? { ...current, index } : current,
+          )
+        }
+      />
     </section>
   );
 }
 
+function isImageAttachment(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+function sortAttachments(attachments: TaskAttachment[]) {
+  return [...attachments].sort((left, right) => {
+    const leftTypeRank = isImageAttachment(left.mime_type) ? 0 : 1;
+    const rightTypeRank = isImageAttachment(right.mime_type) ? 0 : 1;
+
+    if (leftTypeRank !== rightTypeRank) {
+      return leftTypeRank - rightTypeRank;
+    }
+
+    const typeComparison = left.mime_type.localeCompare(right.mime_type, "pt-BR", {
+      sensitivity: "base",
+    });
+    if (typeComparison !== 0) {
+      return typeComparison;
+    }
+
+    return left.file_name.localeCompare(right.file_name, "pt-BR", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+}
+
+function AttachmentViewer({
+  viewer,
+  onClose,
+  onChangeIndex,
+}: {
+  viewer: { task: Task; index: number } | null;
+  onClose: () => void;
+  onChangeIndex: (index: number) => void;
+}) {
+  const attachment = viewer?.task.attachments[viewer.index];
+  const count = viewer?.task.attachments.length ?? 0;
+
+  return (
+    <Dialog open={Boolean(viewer && attachment)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="h-[min(90vh,64rem)] w-[min(96vw,96rem)] max-w-[96rem] grid-rows-[auto_minmax(0,1fr)] gap-3 bg-zinc-950 p-4 text-white sm:max-w-[96rem]" showCloseButton>
+        <DialogTitle className="pr-9 text-sm" title={attachment?.file_name}>
+          {attachment?.file_name ?? "Imagem anexada"}
+        </DialogTitle>
+        {viewer && attachment ? (
+          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-black/50">
+            {isImageAttachment(attachment.mime_type) ? (
+              <>
+                {/* This authenticated API route cannot use Next's remote image optimizer. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/tasks/${viewer.task.id}/attachments/${attachment.id}`}
+                  alt={attachment.file_name}
+                  className="max-h-[calc(90vh-7rem)] w-auto max-w-full rounded-lg object-contain"
+                />
+              </>
+            ) : (
+              <a href={`/api/tasks/${viewer.task.id}/attachments/${attachment.id}`} download className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-xl px-8 text-center hover:bg-white/5">
+                <FileText className="size-12 text-slate-400" />
+                <span className="max-w-64 break-words">{attachment.file_name}</span>
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-sm">Baixar arquivo</span>
+              </a>
+            )}
+            {count > 1 ? (
+              <>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full"
+                  onClick={() => onChangeIndex((viewer.index - 1 + count) % count)}
+                  aria-label="Imagem anterior"
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full"
+                  onClick={() => onChangeIndex((viewer.index + 1) % count)}
+                  aria-label="Próxima imagem"
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+                <span className="absolute bottom-3 rounded-full bg-black/65 px-2.5 py-1 text-xs">
+                  {viewer.index + 1} de {count}
+                </span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AttachmentPreview({
+  attachment,
+  taskId,
+}: {
+  attachment: TaskAttachment;
+  taskId: string;
+}) {
+  if (!isImageAttachment(attachment.mime_type)) {
+    return (
+      <span className="flex size-16 items-center justify-center rounded-lg bg-slate-900/5 text-slate-500 dark:bg-white/10" title={attachment.file_name}>
+        <FileText className="size-6" />
+      </span>
+    );
+  }
+
+  return (
+    <>
+      {/* This authenticated API route cannot use Next's remote image optimizer. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/tasks/${taskId}/attachments/${attachment.id}`}
+        alt={attachment.file_name}
+        className="size-16 rounded-lg object-cover transition group-hover/image:scale-105"
+      />
+    </>
+  );
+}
+
 function TaskEditForm({
+  task,
   editingState,
   setEditingState,
   onSave,
   onCancel,
+  onDirtyChange,
 }: {
+  task: Task;
   editingState: EditingState;
   setEditingState: Dispatch<SetStateAction<EditingState | null>>;
-  onSave: () => Promise<void>;
+  onSave: (changes: {
+    attachments: File[];
+    attachmentIdsToDelete: string[];
+  }) => Promise<void>;
   onCancel: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }) {
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [attachmentIdsToDelete, setAttachmentIdsToDelete] = useState<string[]>([]);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  const hasDetailChanges =
+    editingState.title !== task.title ||
+    editingState.description !== (task.description ?? "") ||
+    editingState.category !== (task.category ?? "") ||
+    editingState.due_date !== (task.due_date ?? "") ||
+    editingState.planned_for !== (task.planned_for ?? "") ||
+    editingState.estimated_minutes !== (task.estimated_minutes?.toString() ?? "") ||
+    editingState.priority !== task.priority ||
+    editingState.recurrence !== task.recurrence;
+  const hasChanges =
+    hasDetailChanges ||
+    pendingAttachments.length > 0 ||
+    attachmentIdsToDelete.length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(hasChanges);
+    return () => onDirtyChange?.(false);
+  }, [hasChanges, onDirtyChange]);
+
+  const selectAttachments = (files: File[]) => {
+    setPendingAttachments((current) => [...current, ...files]);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    const files = Array.from(event.clipboardData.files);
+    if (!files.length) return;
+    event.preventDefault();
+    selectAttachments(files);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) selectAttachments(files);
+  };
+
   return (
-    <div className="min-w-0 space-y-2">
+    <div
+      className={["min-w-0 space-y-2 rounded-2xl transition", isDraggingFiles ? "bg-teal-500/5 ring-2 ring-teal-400/70 ring-inset" : ""].join(" ")}
+      onPaste={handlePaste}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDraggingFiles(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setIsDraggingFiles(false);
+      }}
+      onDrop={handleDrop}
+    >
       <Input
         className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20"
         value={editingState.title}
@@ -1418,6 +1654,77 @@ function TaskEditForm({
         }
         maxLength={120}
       />
+
+      <Textarea
+        className="min-h-20 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20"
+        value={editingState.description}
+        onChange={(event) =>
+          setEditingState((current) =>
+            current ? { ...current, description: event.target.value } : current,
+          )
+        }
+        placeholder="Descrição opcional"
+        rows={3}
+      />
+
+      <div className="rounded-2xl border border-slate-900/10 p-3 dark:border-white/10">
+        <p className="mb-2 text-xs font-medium text-slate-500 dark:text-white/45">
+          Anexos
+        </p>
+        {task.attachments.length ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {sortAttachments(task.attachments)
+              .filter((item) => !attachmentIdsToDelete.includes(item.id))
+              .map((item) => (
+              <div key={item.id} className="relative">
+                <AttachmentPreview attachment={item} taskId={task.id} />
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="destructive"
+                  className="absolute -right-2 -top-2 size-6 rounded-full"
+                  onClick={() => {
+                    setAttachmentIdsToDelete((current) =>
+                      current.includes(item.id) ? current : [...current, item.id],
+                    );
+                  }}
+                  aria-label={`Excluir ${item.file_name}`}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+              ))}
+          </div>
+        ) : null}
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-slate-900/10 px-3 text-sm hover:bg-slate-900/5 dark:border-white/10 dark:hover:bg-white/10">
+          <ImagePlus className="size-4" />
+          Adicionar arquivo
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            onChange={(event) => selectAttachments(Array.from(event.target.files ?? []))}
+          />
+        </label>
+        {pendingAttachments.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {pendingAttachments.map((attachment, index) => (
+              <span key={`${attachment.name}-${attachment.lastModified}-${index}`} className="flex items-center rounded-full bg-teal-500/10 pl-2.5 text-xs text-teal-700 dark:text-teal-200">
+                {attachment.name || "Arquivo"}
+                <Button type="button" size="icon-sm" variant="ghost" className="size-7" onClick={() => setPendingAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remover ${attachment.name || "arquivo"}`}><X className="size-3" /></Button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <p className="mt-2 text-xs text-slate-500 dark:text-white/45">
+          Você também pode colar um arquivo ou print com Ctrl+V. O arquivo será salvo ao clicar em “Salvar”.
+        </p>
+        {isDraggingFiles ? (
+          <p className="mt-2 rounded-xl border border-dashed border-teal-500/60 bg-teal-500/10 px-3 py-2 text-center text-sm font-medium text-teal-700 dark:text-teal-200">
+            Solte os arquivos para anexá-los
+          </p>
+        ) : null}
+      </div>
 
       <div className="grid min-w-0 gap-2 sm:grid-cols-3">
         <Select
@@ -1528,7 +1835,10 @@ function TaskEditForm({
           type="button"
           size="sm"
           className="h-11 flex-1 touch-manipulation rounded-full px-4 sm:h-7 sm:flex-none sm:px-2.5"
-          onClick={onSave}
+          onClick={() =>
+            onSave({ attachments: pendingAttachments, attachmentIdsToDelete })
+          }
+          disabled={!hasChanges}
         >
           Salvar
         </Button>
