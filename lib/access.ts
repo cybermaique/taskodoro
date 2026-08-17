@@ -1,18 +1,13 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 
-import { accessCookieName, env } from "@/lib/env";
 
 export function isPasswordProtectionEnabled() {
-  return Boolean(env.APP_PASSWORD);
+  return false;
 }
 
 export function isAuthorizedRequest(request: NextRequest) {
-  if (!isPasswordProtectionEnabled()) {
-    return true;
-  }
-
-  const cookieValue = request.cookies.get(accessCookieName)?.value;
-  return cookieValue === "1";
+  void request;
+  return true;
 }
 
 export function unauthorizedResponse() {
@@ -20,9 +15,5 @@ export function unauthorizedResponse() {
 }
 
 export function validateAccessPassword(password: string) {
-  if (!isPasswordProtectionEnabled()) {
-    return true;
-  }
-
-  return password === env.APP_PASSWORD;
+  return Boolean(password);
 }

@@ -1,113 +1,46 @@
-﻿"use client";
+"use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-interface AccessGateProps {
-  children: React.ReactNode;
-}
-
-interface AccessState {
-  enabled: boolean;
-  authorized: boolean;
-}
-
-export function AccessGate({ children }: AccessGateProps) {
-  const [state, setState] = useState<AccessState | null>(null);
+export function AccessGate({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null | undefined>();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const run = async () => {
-      const response = await fetch("/api/access", { cache: "no-store" });
-      const data = (await response.json()) as AccessState;
-      setState(data);
-    };
-
-    run().catch(() => {
-      setState({ enabled: false, authorized: true });
-    });
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    return () => listener.subscription.unsubscribe();
   }, []);
 
-  const submitPassword = async (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch("/api/access", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      });
-
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Senha inválida.");
-      }
-
-      window.location.reload();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao validar acesso.");
-    } finally {
-      setIsSubmitting(false);
+    setMessage(null);
+    const supabase = createSupabaseBrowserClient();
+    const result = isSignUp
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+    setIsSubmitting(false);
+    if (result.error) return setMessage(result.error.message);
+    if (isSignUp && !result.data.session) {
+      return setMessage("Conta criada. Confirme seu e-mail para entrar.");
     }
+    window.location.reload();
   };
 
-  if (!state) {
-    return (
-      <div className="access-loading-safe-insets min-h-svh">
-        <Card className="mx-auto w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Carregando...</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
+  if (session === undefined) return <div className="access-loading-safe-insets min-h-svh" />;
+  if (session) return <><Button type="button" variant="ghost" className="fixed right-3 top-3 z-50 bg-background/80 backdrop-blur" onClick={async () => { await createSupabaseBrowserClient().auth.signOut(); window.location.reload(); }}>Sair</Button>{children}</>;
 
-  if (!state.enabled || state.authorized) {
-    return <>{children}</>;
-  }
-
-  return (
-    <div className="access-safe-insets grid min-h-svh place-items-center">
-      <Card className="w-full max-w-md border-border/70">
-        <CardHeader>
-          <CardTitle>Acesso protegido</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-3" onSubmit={submitPassword}>
-            <Input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Digite a senha"
-              className="h-11 sm:h-8"
-              required
-            />
-            {errorMessage ? (
-              <p className="break-words text-sm text-destructive">
-                {errorMessage}
-              </p>
-            ) : null}
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="min-h-11 w-full sm:min-h-8"
-            >
-              {isSubmitting ? "Validando..." : "Entrar"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <main className="access-safe-insets grid min-h-svh place-items-center"><Card className="w-full max-w-md border-border/70"><CardHeader><CardTitle>{isSignUp ? "Criar conta" : "Entrar"}</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={submit}><Input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="seu@email.com" required /><Input type="password" autoComplete={isSignUp ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha" minLength={6} required />{message ? <p className="text-sm text-destructive">{message}</p> : null}<Button type="submit" disabled={isSubmitting} className="min-h-11 w-full sm:min-h-8">{isSubmitting ? "Aguarde..." : isSignUp ? "Criar conta" : "Entrar"}</Button><Button type="button" variant="ghost" className="w-full" onClick={() => { setIsSignUp((value) => !value); setMessage(null); }}>{isSignUp ? "Já tenho uma conta" : "Criar uma conta"}</Button></form></CardContent></Card></main>;
 }
