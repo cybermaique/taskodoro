@@ -184,7 +184,7 @@ export async function createTaskAttachment({
   taskId: string;
   file: File;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const extension = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || "bin";
   const storagePath = `${taskId}/${crypto.randomUUID()}.${extension}`;
   const { error: uploadError } = await supabase.storage
@@ -211,7 +211,7 @@ export async function createTaskAttachment({
 }
 
 export async function getTaskAttachment(taskId: string, attachmentId: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data: attachment, error } = await supabase
     .from("task_attachments")
     .select("id,task_id,file_name,mime_type,storage_path,created_at")
@@ -228,7 +228,7 @@ export async function getTaskAttachment(taskId: string, attachmentId: string) {
 }
 
 export async function deleteTaskAttachment(taskId: string, attachmentId: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data: attachment, error: findError } = await supabase
     .from("task_attachments")
     .select("storage_path")
@@ -253,7 +253,7 @@ export async function deleteTaskAttachment(taskId: string, attachmentId: string)
 }
 
 export async function listTasks() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("tasks")
     .select(TASK_COLUMNS)
@@ -269,7 +269,7 @@ export async function listTasks() {
 }
 
 export async function getTaskById(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("tasks")
     .select(TASK_COLUMNS)
@@ -284,7 +284,7 @@ export async function getTaskById(id: string) {
 }
 
 export async function createTask(input: CreateTaskInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const payload = {
     title: input.title.trim(),
     description: normalizeNullableText(input.description),
@@ -316,7 +316,7 @@ export async function createTask(input: CreateTaskInput) {
 }
 
 export async function updateTask(id: string, input: UpdateTaskInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const previousTask = input.status === "completed" ? await getTaskById(id) : null;
   const updatePayload: Record<string, string | number | null> = {};
 
@@ -399,7 +399,7 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
 }
 
 async function createNextRecurringTask(task: Task) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const recurrence = task.recurrence;
 
   if (recurrence === "none") {
@@ -427,7 +427,7 @@ async function createNextRecurringTask(task: Task) {
 }
 
 export async function deleteTask(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("tasks").delete().eq("id", id);
 
   if (error) {
@@ -436,7 +436,7 @@ export async function deleteTask(id: string) {
 }
 
 export async function createSubtask(input: CreateSubtaskInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const payload = {
     task_id: input.task_id,
     title: input.title.trim(),
@@ -457,7 +457,7 @@ export async function createSubtask(input: CreateSubtaskInput) {
 }
 
 export async function getSubtaskById(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("subtasks")
     .select(SUBTASK_COLUMNS)
@@ -472,7 +472,7 @@ export async function getSubtaskById(id: string) {
 }
 
 export async function updateSubtask(id: string, input: UpdateSubtaskInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const updatePayload: Record<string, string | boolean> = {};
 
   if (typeof input.title === "string") {
@@ -512,7 +512,7 @@ export async function updateSubtask(id: string, input: UpdateSubtaskInput) {
 }
 
 export async function deleteSubtask(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("subtasks").delete().eq("id", id);
 
   if (error) {
@@ -529,7 +529,7 @@ export async function recordFocusSession({
   durationSeconds: number;
   completedCycle: boolean;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const duration = Math.max(1, Math.floor(durationSeconds));
   const endedAt = new Date();
   const startedAt = new Date(endedAt.getTime() - duration * 1000);
