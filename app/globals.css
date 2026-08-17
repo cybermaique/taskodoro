@@ -153,6 +153,18 @@
     max-width: 100%;
     touch-action: manipulation;
   }
+
+  button:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [data-slot="checkbox"]:not([data-disabled]),
+  label:has(input[type="file"]) {
+    cursor: pointer;
+  }
 }
 
 @layer utilities {
