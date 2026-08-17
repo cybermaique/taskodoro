@@ -13,7 +13,7 @@ function mapNote(note: Note): Note {
 }
 
 export async function listNotes() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("notes")
     .select(NOTE_COLUMNS)
@@ -27,7 +27,7 @@ export async function listNotes() {
 }
 
 export async function getNoteById(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("notes")
     .select(NOTE_COLUMNS)
@@ -42,7 +42,7 @@ export async function getNoteById(id: string) {
 }
 
 export async function createNote(input: CreateNoteInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const content = input.content.trim();
 
   if (!content) {
@@ -68,7 +68,7 @@ export async function createNote(input: CreateNoteInput) {
 }
 
 export async function updateNote(id: string, input: UpdateNoteInput) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const updatePayload: Record<string, unknown> = {};
 
   if (typeof input.content === "string") {
@@ -103,7 +103,7 @@ export async function updateNote(id: string, input: UpdateNoteInput) {
 }
 
 export async function deleteNote(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("notes").delete().eq("id", id);
 
   if (error) {

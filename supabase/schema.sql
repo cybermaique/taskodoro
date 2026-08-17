@@ -110,3 +110,41 @@ for each row
 execute function public.set_updated_at();
 
 notify pgrst, 'reload schema';
+
+-- Authentication and per-user data isolation (Supabase Auth + RLS)
+alter table public.tasks add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.notes add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+
+alter table public.tasks enable row level security;
+alter table public.notes enable row level security;
+alter table public.subtasks enable row level security;
+alter table public.focus_sessions enable row level security;
+alter table public.task_attachments enable row level security;
+
+drop policy if exists "Usuários acessam as próprias tarefas" on public.tasks;
+create policy "Usuários acessam as próprias tarefas" on public.tasks for all to authenticated
+using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists "Usuários acessam as próprias notas" on public.notes;
+create policy "Usuários acessam as próprias notas" on public.notes for all to authenticated
+using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists "Usuários acessam subtarefas próprias" on public.subtasks;
+create policy "Usuários acessam subtarefas próprias" on public.subtasks for all to authenticated
+using (exists (select 1 from public.tasks where tasks.id = subtasks.task_id and tasks.user_id = auth.uid()))
+with check (exists (select 1 from public.tasks where tasks.id = subtasks.task_id and tasks.user_id = auth.uid()));
+
+drop policy if exists "Usuários acessam sessões próprias" on public.focus_sessions;
+create policy "Usuários acessam sessões próprias" on public.focus_sessions for all to authenticated
+using (exists (select 1 from public.tasks where tasks.id = focus_sessions.task_id and tasks.user_id = auth.uid()))
+with check (exists (select 1 from public.tasks where tasks.id = focus_sessions.task_id and tasks.user_id = auth.uid()));
+
+drop policy if exists "Usuários acessam anexos próprios" on public.task_attachments;
+create policy "Usuários acessam anexos próprios" on public.task_attachments for all to authenticated
+using (exists (select 1 from public.tasks where tasks.id = task_attachments.task_id and tasks.user_id = auth.uid()))
+with check (exists (select 1 from public.tasks where tasks.id = task_attachments.task_id and tasks.user_id = auth.uid()));
+
+drop policy if exists "Usuários acessam arquivos próprios" on storage.objects;
+create policy "Usuários acessam arquivos próprios" on storage.objects for all to authenticated
+using (bucket_id = 'task-attachments' and exists (select 1 from public.tasks where tasks.id::text = (storage.foldername(name))[1] and tasks.user_id = auth.uid()))
+with check (bucket_id = 'task-attachments' and exists (select 1 from public.tasks where tasks.id::text = (storage.foldername(name))[1] and tasks.user_id = auth.uid()));
