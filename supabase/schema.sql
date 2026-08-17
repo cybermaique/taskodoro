@@ -42,6 +42,22 @@ create table if not exists public.focus_sessions (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.task_attachments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  file_name text not null,
+  mime_type text not null,
+  storage_path text not null unique,
+  created_at timestamptz not null default now()
+);
+
+insert into storage.buckets (id, name, public)
+values ('task-attachments', 'task-attachments', false)
+on conflict (id) do nothing;
+
+alter table public.task_attachments
+  drop constraint if exists task_attachments_mime_type_check;
+
 create index if not exists idx_tasks_created_at_desc on public.tasks (created_at desc);
 create index if not exists idx_tasks_status on public.tasks (status);
 create index if not exists idx_tasks_due_date on public.tasks (due_date);
@@ -52,6 +68,7 @@ create index if not exists idx_tasks_recurrence on public.tasks (recurrence);
 create index if not exists idx_subtasks_task_id on public.subtasks (task_id);
 create index if not exists idx_focus_sessions_task_id on public.focus_sessions (task_id);
 create index if not exists idx_focus_sessions_started_at on public.focus_sessions (started_at);
+create index if not exists idx_task_attachments_task_id on public.task_attachments (task_id);
 
 create or replace function public.set_updated_at()
 returns trigger

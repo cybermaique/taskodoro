@@ -7,6 +7,7 @@ import type {
   FocusSession,
   Subtask,
   Task,
+  TaskAttachment,
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
@@ -33,6 +34,14 @@ const TASK_COLUMNS = `
   updated_at,
   pomodoro_minutes,
   break_minutes,
+  task_attachments(
+    id,
+    task_id,
+    file_name,
+    mime_type,
+    storage_path,
+    created_at
+  ),
   subtasks(
     id,
     task_id,
@@ -143,11 +152,16 @@ function addRecurrenceDate(value: string | null, recurrence: TaskRecurrence) {
 }
 
 function mapTask(task: Task): Task {
+  const rawTask = task as Task & { task_attachments?: TaskAttachment[] };
+
   return {
     ...task,
     focused_seconds: task.focused_seconds ?? 0,
     pomodoro_count: task.pomodoro_count ?? 0,
     recurrence: task.recurrence ?? "none",
+    attachments: Array.isArray(rawTask.task_attachments)
+      ? rawTask.task_attachments
+      : [],
     subtasks: Array.isArray(task.subtasks)
       ? [...task.subtasks].sort(
           (left, right) =>
@@ -163,6 +177,81 @@ function mapTask(task: Task): Task {
   };
 }
 
+export async function createTaskAttachment({
+  taskId,
+  file,
+}: {
+  taskId: string;
+  file: File;
+}) {
+  const supabase = createSupabaseServerClient();
+  const extension = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || "bin";
+  const storagePath = `${taskId}/${crypto.randomUUID()}.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from("task-attachments")
+    .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { error: insertError } = await supabase.from("task_attachments").insert({
+    task_id: taskId,
+    file_name: file.name || `arquivo.${extension}`,
+    mime_type: file.type || "application/octet-stream",
+    storage_path: storagePath,
+  });
+
+  if (insertError) {
+    await supabase.storage.from("task-attachments").remove([storagePath]);
+    throw new Error(insertError.message);
+  }
+
+  return getTaskById(taskId);
+}
+
+export async function getTaskAttachment(taskId: string, attachmentId: string) {
+  const supabase = createSupabaseServerClient();
+  const { data: attachment, error } = await supabase
+    .from("task_attachments")
+    .select("id,task_id,file_name,mime_type,storage_path,created_at")
+    .eq("id", attachmentId)
+    .eq("task_id", taskId)
+    .single();
+
+  if (error) throw new Error(error.message);
+  const { data, error: downloadError } = await supabase.storage
+    .from("task-attachments")
+    .download((attachment as TaskAttachment).storage_path);
+  if (downloadError) throw new Error(downloadError.message);
+  return { attachment: attachment as TaskAttachment, data };
+}
+
+export async function deleteTaskAttachment(taskId: string, attachmentId: string) {
+  const supabase = createSupabaseServerClient();
+  const { data: attachment, error: findError } = await supabase
+    .from("task_attachments")
+    .select("storage_path")
+    .eq("id", attachmentId)
+    .eq("task_id", taskId)
+    .single();
+  if (findError) throw new Error(findError.message);
+
+  const { error: deleteError } = await supabase
+    .from("task_attachments")
+    .delete()
+    .eq("id", attachmentId)
+    .eq("task_id", taskId);
+  if (deleteError) throw new Error(deleteError.message);
+
+  const { error: storageError } = await supabase.storage
+    .from("task-attachments")
+    .remove([(attachment as { storage_path: string }).storage_path]);
+  if (storageError) throw new Error(storageError.message);
+
+  return getTaskById(taskId);
+}
+
 export async function listTasks() {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
@@ -176,7 +265,7 @@ export async function listTasks() {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as Task[]).map(mapTask);
+  return ((data ?? []) as unknown as Task[]).map(mapTask);
 }
 
 export async function getTaskById(id: string) {
@@ -191,7 +280,7 @@ export async function getTaskById(id: string) {
     throw new Error(error.message);
   }
 
-  return mapTask(data as Task);
+  return mapTask(data as unknown as Task);
 }
 
 export async function createTask(input: CreateTaskInput) {
@@ -223,7 +312,7 @@ export async function createTask(input: CreateTaskInput) {
     throw new Error(error.message);
   }
 
-  return mapTask(data as Task);
+  return mapTask(data as unknown as Task);
 }
 
 export async function updateTask(id: string, input: UpdateTaskInput) {

@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { FormEvent, useState } from "react";
-import { CalendarCheck, CalendarDays, Flag, Folder, Plus, Repeat, Timer } from "lucide-react";
+import { type ClipboardEvent, type DragEvent, type FormEvent, useEffect, useState } from "react";
+import { CalendarCheck, CalendarDays, ClipboardPaste, Flag, Folder, Paperclip, Plus, Repeat, Timer, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ interface TaskFormProps {
   isSubmitting: boolean;
   isCompact?: boolean;
   categorySuggestions: string[];
+  onDirtyChange?: (isDirty: boolean) => void;
   onCreate: (values: {
     title: string;
     description?: string;
@@ -37,6 +38,7 @@ interface TaskFormProps {
     recurrence?: TaskRecurrence;
     pomodoro_minutes?: number | null;
     break_minutes?: number | null;
+    attachments?: File[];
   }) => Promise<void>;
 }
 
@@ -44,7 +46,7 @@ const EMPTY_VALUES: TaskFormValues = {
   title: "",
   description: "",
   priority: "medium",
-  category: "",
+  category: "trabalho",
   due_date: "",
   planned_for: "",
   estimated_minutes: "",
@@ -103,10 +105,49 @@ export function TaskForm({
   isSubmitting,
   isCompact = false,
   categorySuggestions,
+  onDirtyChange,
   onCreate,
 }: TaskFormProps) {
   const [values, setValues] = useState<TaskFormValues>(EMPTY_VALUES);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  const isDirty =
+    values.title !== EMPTY_VALUES.title ||
+    values.description !== EMPTY_VALUES.description ||
+    values.priority !== EMPTY_VALUES.priority ||
+    values.category !== EMPTY_VALUES.category ||
+    values.due_date !== EMPTY_VALUES.due_date ||
+    values.planned_for !== EMPTY_VALUES.planned_for ||
+    values.estimated_minutes !== EMPTY_VALUES.estimated_minutes ||
+    values.recurrence !== EMPTY_VALUES.recurrence ||
+    values.pomodoro_minutes !== EMPTY_VALUES.pomodoro_minutes ||
+    values.break_minutes !== EMPTY_VALUES.break_minutes ||
+    attachments.length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => onDirtyChange?.(false);
+  }, [isDirty, onDirtyChange]);
+
+  const addAttachments = (files: File[]) => {
+    setAttachments((current) => [...current, ...files]);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLFormElement>) => {
+    const files = Array.from(event.clipboardData.files);
+    if (!files.length) return;
+    event.preventDefault();
+    addAttachments(files);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) addAttachments(files);
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -131,9 +172,11 @@ export function TaskForm({
         recurrence: values.recurrence,
         pomodoro_minutes: readMinutes(values.pomodoro_minutes),
         break_minutes: readMinutes(values.break_minutes),
+        attachments: attachments.length ? attachments : undefined,
       });
 
       setValues(EMPTY_VALUES);
+      setAttachments([]);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Não foi possível criar a tarefa.",
@@ -143,7 +186,19 @@ export function TaskForm({
 
   return (
     <section className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20">
-      <form onSubmit={onSubmit} className="min-w-0 space-y-3 sm:space-y-4">
+      <form
+        onSubmit={onSubmit}
+        onPaste={handlePaste}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDraggingFiles(true);
+        }}
+        onDragLeave={(event) => {
+          if (event.currentTarget === event.target) setIsDraggingFiles(false);
+        }}
+        onDrop={handleDrop}
+        className={["min-w-0 space-y-3 rounded-2xl transition sm:space-y-4", isDraggingFiles ? "bg-teal-500/5 ring-2 ring-teal-400/70 ring-inset" : ""].join(" ")}
+      >
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">Nova tarefa</h2>
@@ -162,6 +217,32 @@ export function TaskForm({
             {isSubmitting ? "Salvando" : "Adicionar"}
           </Button>
         </div>
+
+        <div className="flex min-h-10 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+          {attachments.length ? (
+            <>
+              {attachments.map((attachment, index) => (
+                <span key={`${attachment.name}-${attachment.lastModified}-${index}`} className="flex items-center rounded-full border border-teal-500/30 bg-teal-500/10 pl-3 text-teal-700 dark:text-teal-200">
+                  Arquivo: {attachment.name || "arquivo"}
+                  <Button type="button" size="sm" variant="ghost" className="h-8 rounded-full px-2" onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remover ${attachment.name || "arquivo"}`}>
+                    <X className="size-4" />
+                  </Button>
+                </span>
+              ))}
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 hover:bg-slate-900/5 dark:border-white/10 dark:hover:bg-white/10"><Paperclip className="size-3.5" /> Adicionar<input type="file" multiple className="sr-only" onChange={(event) => addAttachments(Array.from(event.target.files ?? []))} /></label>
+            </>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 hover:bg-slate-900/5 dark:border-white/10 dark:hover:bg-white/10"><Paperclip className="size-3.5" /> Anexar arquivo<input type="file" multiple className="sr-only" onChange={(event) => addAttachments(Array.from(event.target.files ?? []))} /></label>
+              <span className="flex items-center gap-1.5"><ClipboardPaste className="size-3.5" /> Cole um arquivo ou print com Ctrl+V.</span>
+            </>
+          )}
+        </div>
+        {isDraggingFiles ? (
+          <p className="rounded-xl border border-dashed border-teal-500/60 bg-teal-500/10 px-3 py-2 text-center text-sm font-medium text-teal-700 dark:text-teal-200">
+            Solte os arquivos para anexá-los
+          </p>
+        ) : null}
 
         <div className="grid gap-3">
           <Input
