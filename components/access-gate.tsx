@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 
 import { Button } from "@/components/ui/button";
@@ -9,19 +10,40 @@ import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export function AccessGate({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null | undefined>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const refreshedSessionId = useRef<string | null>(null);
+
+  const syncSession = useCallback(
+    (nextSession: Session | null) => {
+      setSession(nextSession);
+
+      if (!nextSession) {
+        refreshedSessionId.current = null;
+        return;
+      }
+
+      if (refreshedSessionId.current !== nextSession.user.id) {
+        refreshedSessionId.current = nextSession.user.id;
+        router.refresh();
+      }
+    },
+    [router],
+  );
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    supabase.auth.getSession().then(({ data }) => syncSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) =>
+      syncSession(nextSession),
+    );
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [syncSession]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
