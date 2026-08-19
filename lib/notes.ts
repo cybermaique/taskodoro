@@ -3,7 +3,20 @@ import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { CreateNoteInput, Note, UpdateNoteInput } from "@/types/note";
 
-const NOTE_COLUMNS = "id,content,tags,created_at,updated_at";
+const NOTE_COLUMNS = "id,title,content,tags,created_at,updated_at";
+
+function normalizeNoteTitle(title: string) {
+  return title.trim().slice(0, 160);
+}
+
+function normalizeNoteContent(content: string) {
+  const trimmed = content.trim();
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return trimmed;
+  }
+}
 
 function mapNote(note: Note): Note {
   return {
@@ -43,7 +56,12 @@ export async function getNoteById(id: string) {
 
 export async function createNote(input: CreateNoteInput) {
   const supabase = await createSupabaseServerClient();
-  const content = input.content.trim();
+  const title = normalizeNoteTitle(input.title);
+  const content = normalizeNoteContent(input.content);
+
+  if (!title) {
+    throw new Error("TÃ­tulo da anotaÃ§Ã£o nÃ£o pode ser vazio.");
+  }
 
   if (!content) {
     throw new Error("Conteúdo da anotação não pode ser vazio.");
@@ -56,7 +74,7 @@ export async function createNote(input: CreateNoteInput) {
 
   const { data, error } = await supabase
     .from("notes")
-    .insert({ content, tags })
+    .insert({ title, content, tags })
     .select(NOTE_COLUMNS)
     .single();
 
@@ -71,10 +89,16 @@ export async function updateNote(id: string, input: UpdateNoteInput) {
   const supabase = await createSupabaseServerClient();
   const updatePayload: Record<string, unknown> = {};
 
+  if (typeof input.title === "string") {
+    const title = normalizeNoteTitle(input.title);
+    if (!title) throw new Error("TÃ­tulo da anotaÃ§Ã£o nÃ£o pode ser vazio.");
+    updatePayload.title = title;
+  }
+
   if (typeof input.content === "string") {
-    const trimmed = input.content.trim();
-    if (!trimmed) throw new Error("Conteúdo da anotação não pode ser vazio.");
-    updatePayload.content = trimmed;
+    const content = normalizeNoteContent(input.content);
+    if (!content) throw new Error("Conteúdo da anotação não pode ser vazio.");
+    updatePayload.content = content;
   }
 
   if (input.tags !== undefined) {

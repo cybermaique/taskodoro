@@ -9,10 +9,12 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = (await request.json()) as {
+      title?: string;
       content?: string;
       tags?: string[] | null;
     };
     const note = await updateNote(id, {
+      title: body.title,
       content: body.content,
       tags: body.tags,
     });

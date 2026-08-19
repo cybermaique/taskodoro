@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Braces,
+  CalendarDays,
   Clock,
+  Copy,
   Hash,
+  Maximize2,
   Pencil,
   Plus,
   Search,
@@ -14,22 +18,193 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import type { Note } from "@/types/note";
 
 /* ── helpers ───────────────────────────────────────────── */
 
-function formatRelative(iso: string) {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "agora mesmo";
-  if (diff < 3600) return `há ${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `há ${Math.floor(diff / 3600)}h`;
-  if (diff < 86400 * 7) return `há ${Math.floor(diff / 86400)}d`;
-  return new Date(iso).toLocaleDateString("pt-BR", {
+const NOTE_PREVIEW_MAX_CHARACTERS = 600;
+const NOTE_PREVIEW_MAX_LINES = 8;
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
+}
+
+function hasBeenUpdated(note: Note) {
+  return new Date(note.updated_at).getTime() !== new Date(note.created_at).getTime();
+}
+
+function formatJsonIfValid(content: string) {
+  try {
+    const value: unknown = JSON.parse(content);
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return null;
+  }
+}
+
+function getJsonSummary(content: string) {
+  const value: unknown = JSON.parse(content);
+  if (Array.isArray(value)) return `JSON · ${value.length} itens`;
+  if (value && typeof value === "object")
+    return `JSON · ${Object.keys(value).length} campos`;
+  return "JSON";
+}
+
+type NoteContentBlock =
+  | { type: "text"; content: string }
+  | { type: "code"; content: string; language: "code" | "json" };
+
+type CodeBlockLanguage = "code" | "json";
+
+function expandSlashCodeCommand(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+) {
+  const beforeSelection = value.slice(0, selectionStart);
+  const commandMatch = /\/(code|json)$/.exec(beforeSelection);
+  if (
+    !commandMatch ||
+    (commandMatch.index > 0 && beforeSelection[commandMatch.index - 1] !== "\n")
+  ) {
+    return null;
+  }
+
+  const language = commandMatch[1] as CodeBlockLanguage;
+  const block = `\`\`\`${language}\n\n\`\`\``;
+  const prefix = value.slice(0, commandMatch.index);
+  const suffix = value.slice(selectionEnd);
+
+  return {
+    value: `${prefix}${block}${suffix}`,
+    caretPosition: prefix.length + language.length + 4,
+  };
+}
+
+function parseNoteContent(content: string): NoteContentBlock[] {
+  const blocks: NoteContentBlock[] = [];
+  const codeBlockPattern = /```(json|code)?[ \t]*\r?\n([\s\S]*?)```/gi;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = codeBlockPattern.exec(content))) {
+    const text = content.slice(cursor, match.index).trim();
+    if (text) blocks.push({ type: "text", content: text });
+
+    blocks.push({
+      type: "code",
+      language: match[1]?.toLowerCase() === "json" ? "json" : "code",
+      content: match[2].trim(),
+    });
+    cursor = match.index + match[0].length;
+  }
+
+  const remainingText = content.slice(cursor).trim();
+  if (remainingText) blocks.push({ type: "text", content: remainingText });
+
+  return blocks.length > 0 ? blocks : [{ type: "text", content }];
+}
+
+function getPreview(content: string) {
+  const lines = content.split(/\r?\n/);
+  const linePreview = lines.slice(0, NOTE_PREVIEW_MAX_LINES).join("\n");
+  const preview = linePreview.slice(0, NOTE_PREVIEW_MAX_CHARACTERS).trimEnd();
+  return {
+    content: preview,
+    isTruncated: preview.length < content.length,
+  };
+}
+
+function isCreatedWithinRange(note: Note, from: string, to: string) {
+  const createdAt = new Date(note.created_at).getTime();
+
+  if (from && createdAt < new Date(`${from}T00:00:00`).getTime()) {
+    return false;
+  }
+
+  if (to && createdAt >= new Date(`${to}T00:00:00`).getTime() + 86_400_000) {
+    return false;
+  }
+
+  return true;
+}
+
+function isNoteCardControl(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest("button, a, input, textarea, select, label, summary, details"),
+  );
+}
+
+function splitUrlTrailingPunctuation(value: string) {
+  const match = /[.,;:!?\])}]+$/.exec(value);
+  if (!match) return { url: value, trailingPunctuation: "" };
+
+  return {
+    url: value.slice(0, -match[0].length),
+    trailingPunctuation: match[0],
+  };
+}
+
+function CodeBlock({
+  label,
+  content,
+  collapsible = false,
+}: {
+  label: string;
+  content: string;
+  collapsible?: boolean;
+}) {
+  const lineCount = content.split(/\r?\n/).length;
+  const body = (
+    <pre className="overflow-auto border-t border-white/10 p-3 font-mono text-xs leading-relaxed text-slate-100 [overflow-wrap:anywhere]">
+      {content}
+    </pre>
+  );
+
+  if (collapsible) {
+    return (
+      <details className="group/code rounded-xl border border-slate-700 bg-slate-950 text-slate-100 dark:border-white/10">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <Braces className="size-4 text-violet-300" />
+          <span>{label}</span>
+          <span className="text-xs font-normal text-slate-400">· {lineCount} linhas</span>
+          <span className="ml-auto text-xs font-normal text-slate-400 group-open/code:hidden">
+            Expandir
+          </span>
+          <span className="ml-auto hidden text-xs font-normal text-slate-400 group-open/code:inline">
+            Recolher
+          </span>
+        </summary>
+        <div className="max-h-80 overflow-auto">{body}</div>
+      </details>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-slate-100 dark:border-white/10">
+      <div className="flex min-h-10 items-center gap-2 px-3 text-xs font-medium text-slate-300">
+        <Braces className="size-3.5 text-violet-300" />
+        <span>{label}</span>
+        <span className="text-slate-500">· {lineCount} linhas</span>
+      </div>
+      <div className="max-h-[min(65svh,42rem)] overflow-auto">{body}</div>
+    </section>
+  );
 }
 
 /* parse #tags out of note content */
@@ -67,7 +242,7 @@ function TagChip({ tag, active, onClick }: TagChipProps) {
 
 interface NoteCardProps {
   note: Note;
-  onUpdate: (id: string, content: string) => Promise<void>;
+  onUpdate: (id: string, title: string, content: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onTagClick: (tag: string) => void;
   activeTag: string | null;
@@ -81,10 +256,14 @@ function NoteCard({
   activeTag,
 }: NoteCardProps) {
   const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(note.title);
   const [draft, setDraft] = useState(note.content);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const viewerPopupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -102,17 +281,43 @@ function NoteCard({
     }
   }, [draft, editing]);
 
+  useEffect(() => {
+    if (!viewerOpen) return;
+
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || viewerPopupRef.current?.contains(target)) {
+        return;
+      }
+
+      setViewerOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+  }, [viewerOpen]);
+
   const tags = extractHashtags(note.content);
+  const contentBlocks = useMemo(() => parseNoteContent(note.content), [note.content]);
+  const contentLineCount = note.content.split(/\r?\n/).length;
+  const useFullscreenViewer =
+    note.content.length > 1600 || contentLineCount > 30;
 
   const handleSave = async () => {
-    if (draft.trim() === note.content || !draft.trim()) {
+    if (
+      !draftTitle.trim() ||
+      !draft.trim() ||
+      (draftTitle.trim() === note.title && draft.trim() === note.content)
+    ) {
       setEditing(false);
+      setDraftTitle(note.title);
       setDraft(note.content);
       return;
     }
     setSaving(true);
     try {
-      await onUpdate(note.id, draft.trim());
+      await onUpdate(note.id, draftTitle.trim(), draft.trim());
     } finally {
       setSaving(false);
       setEditing(false);
@@ -122,12 +327,35 @@ function NoteCard({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
       setEditing(false);
+      setDraftTitle(note.title);
       setDraft(note.content);
     }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSave();
     }
+  };
+
+  const handleEditDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const expansion = expandSlashCodeCommand(
+      event.target.value,
+      event.target.selectionStart,
+      event.target.selectionEnd,
+    );
+
+    if (!expansion) {
+      setDraft(event.target.value);
+      return;
+    }
+
+    setDraft(expansion.value);
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(
+        expansion.caretPosition,
+        expansion.caretPosition,
+      );
+    });
   };
 
   const handleDelete = async () => {
@@ -139,16 +367,47 @@ function NoteCard({
     }
   };
 
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(note.content);
+    setCopied(true);
+  };
+
+  const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (editing || isNoteCardControl(event.target)) return;
+    setViewerOpen(true);
+  };
+
   /* highlight #tags inside content */
   function renderContent(text: string) {
-    const parts = text.split(/(#[\w\u00C0-\u024F]+)/g);
+    const parts = text.split(/(https?:\/\/[^\s<>"']+|#[\w\u00C0-\u024F]+)/g);
     return parts.map((part, i) => {
+      if (/^https?:\/\//i.test(part)) {
+        const { url, trailingPunctuation } = splitUrlTrailingPunctuation(part);
+        return (
+          <span key={i}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className="font-medium text-violet-600 underline decoration-violet-400/60 underline-offset-2 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-200"
+            >
+              {url}
+            </a>
+            {trailingPunctuation}
+          </span>
+        );
+      }
+
       if (/^#[\w\u00C0-\u024F]+$/.test(part)) {
         const isActive = activeTag === part.toLowerCase();
         return (
           <span
             key={i}
-            onClick={() => onTagClick(part.toLowerCase())}
+            onClick={(event) => {
+              event.stopPropagation();
+              onTagClick(part.toLowerCase());
+            }}
             className={[
               "cursor-pointer font-semibold transition-colors",
               isActive
@@ -164,13 +423,61 @@ function NoteCard({
     });
   }
 
+  function renderNoteContent(full = false) {
+    return contentBlocks.map((block, index) => {
+      if (block.type === "code") {
+        const formattedJson =
+          block.language === "json" ? formatJsonIfValid(block.content) : null;
+        const codeContent = formattedJson ?? block.content;
+        const label =
+          block.language === "json"
+            ? formattedJson
+              ? getJsonSummary(formattedJson)
+              : "JSON inválido"
+            : "Código";
+
+        return (
+          <CodeBlock
+            key={`${block.language}-${index}`}
+            label={label}
+            content={codeContent}
+            collapsible={!full}
+          />
+        );
+      }
+
+      const textPreview = full ? { content: block.content, isTruncated: false } : getPreview(block.content);
+
+      return (
+        <div key={`text-${index}`} className="space-y-3">
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800 [overflow-wrap:anywhere] dark:text-white/85">
+            {renderContent(textPreview.content)}
+            {textPreview.isTruncated ? "…" : null}
+          </p>
+          {textPreview.isTruncated ? (
+            <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-400/25 dark:bg-violet-400/10 dark:text-violet-200">
+              <Maximize2 className="size-3.5 shrink-0" />
+              <span className="font-medium">Conteúdo resumido</span>
+              <span className="text-violet-700/75 dark:text-violet-200/70">
+                {contentLineCount} linhas
+              </span>
+              <span className="sm:ml-auto">Clique para abrir completo</span>
+            </div>
+          ) : null}
+        </div>
+      );
+    });
+  }
+
   return (
     <div
       className={[
         "group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-shadow hover:shadow-md sm:p-4",
         "dark:bg-white/[0.05] dark:border-white/10",
+        editing ? "" : "cursor-pointer",
         deleting ? "opacity-50 pointer-events-none" : "",
       ].join(" ")}
+      onClick={handleCardClick}
     >
       {/* actions */}
       <div className="-mr-1 -mt-1 mb-1 flex items-center justify-end gap-1 opacity-100 transition-opacity sm:absolute sm:right-3 sm:top-3 sm:m-0 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
@@ -183,6 +490,7 @@ function NoteCard({
             aria-label="Editar anotação"
             title="Editar anotação"
             onClick={() => {
+              setDraftTitle(note.title);
               setDraft(note.content);
               setEditing(true);
             }}
@@ -207,10 +515,17 @@ function NoteCard({
       {/* body */}
       {editing ? (
         <div className="space-y-2">
+          <Input
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            maxLength={160}
+            placeholder="Título da anotação"
+            className="h-11 rounded-xl border-violet-300 bg-white text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:bg-white/10 dark:border-white/20"
+          />
           <Textarea
             ref={textareaRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={handleEditDraftChange}
             onKeyDown={handleKeyDown}
             className="min-h-24 resize-none rounded-xl border-violet-300 bg-white text-base focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:bg-white/10 dark:border-white/20"
             rows={3}
@@ -220,7 +535,7 @@ function NoteCard({
               size="sm"
               className="h-11 flex-1 rounded-full bg-violet-600 px-4 text-sm text-white hover:bg-violet-700 sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
               onClick={handleSave}
-              disabled={saving || !draft.trim()}
+              disabled={saving || !draftTitle.trim() || !draft.trim()}
             >
               {saving ? "Salvando…" : "Salvar"}
             </Button>
@@ -230,6 +545,7 @@ function NoteCard({
               className="h-11 flex-1 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
               onClick={() => {
                 setEditing(false);
+                setDraftTitle(note.title);
                 setDraft(note.content);
               }}
             >
@@ -241,38 +557,79 @@ function NoteCard({
           </div>
         </div>
       ) : (
-        <p
-          className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800 [overflow-wrap:anywhere] sm:pr-10 dark:text-white/85"
-          onDoubleClick={() => {
-            setDraft(note.content);
-            setEditing(true);
-          }}
-        >
-          {renderContent(note.content)}
-        </p>
-      )}
-
-      {/* footer */}
-      {!editing && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {tags.length > 0 && (
-            <>
-              {tags.map((tag) => (
-                <TagChip
-                  key={tag}
-                  tag={tag}
-                  active={activeTag === tag}
-                  onClick={() => onTagClick(tag)}
-                />
-              ))}
-            </>
-          )}
-          <div className="flex w-full items-center justify-end gap-1 text-xs text-slate-400 sm:ml-auto sm:w-auto dark:text-white/35">
-            <Clock className="size-3" />
-            <span>{formatRelative(note.updated_at)}</span>
+        <div className="min-w-0 sm:pr-10">
+          <div className="mb-3 min-w-0 space-y-1">
+            <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">
+              {renderContent(note.title)}
+            </h3>
+            <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-white/35">
+              <Clock className="size-3" />
+              <span>Criada em {formatDateTime(note.created_at)}</span>
+              {hasBeenUpdated(note) && (
+                <span title={`Atualizada em ${formatDateTime(note.updated_at)}`}>
+                  · Atualizada em {formatDateTime(note.updated_at)}
+                </span>
+              )}
+            </div>
           </div>
+          <div className="space-y-3">{renderNoteContent()}</div>
         </div>
       )}
+
+      {!editing && tags.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {tags.map((tag) => (
+            <TagChip
+              key={tag}
+              tag={tag}
+              active={activeTag === tag}
+              onClick={() => onTagClick(tag)}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      <Dialog
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        disablePointerDismissal={false}
+      >
+        <DialogContent
+          onBackdropClick={() => setViewerOpen(false)}
+          popupRef={viewerPopupRef}
+          className={[
+            "grid grid-rows-[auto_minmax(0,1fr)] gap-3 bg-white dark:bg-zinc-950",
+            useFullscreenViewer
+              ? "h-[100svh] w-screen max-w-none rounded-none p-4 sm:w-screen sm:max-w-none sm:p-6"
+              : "max-h-[min(92svh,56rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden p-4 sm:w-[min(94vw,88rem)] sm:max-w-[88rem] sm:p-6",
+          ].join(" ")}
+        >
+          <div className="flex min-w-0 items-start gap-3 pr-8">
+            <div className="min-w-0">
+              <DialogTitle>{note.title}</DialogTitle>
+              <DialogDescription className="mt-1">
+                Criada em {formatDateTime(note.created_at)}
+                {hasBeenUpdated(note)
+                  ? ` · Atualizada em ${formatDateTime(note.updated_at)}`
+                  : ""}
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={handleCopy}
+            >
+              <Copy className="size-3.5" />
+              {copied ? "Copiado" : "Copiar"}
+            </Button>
+          </div>
+          <div className="min-h-0 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="space-y-3">{renderNoteContent(true)}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -285,11 +642,14 @@ interface NotesPanelProps {
 
 export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /* auto-grow compose textarea */
@@ -319,26 +679,34 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      result = result.filter((n) => n.content.toLowerCase().includes(q));
+      result = result.filter(
+        (n) =>
+          n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+      );
     }
+    result = result.filter((note) =>
+      isCreatedWithinRange(note, createdFrom, createdTo),
+    );
     return result;
-  }, [notes, activeTag, search]);
+  }, [notes, activeTag, search, createdFrom, createdTo]);
 
   const handleCreate = async () => {
+    const title = titleDraft.trim();
     const content = draft.trim();
-    if (!content) return;
+    if (!title || !content) return;
     setSubmitting(true);
     setError(null);
     try {
       const res = await fetch("/api/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ title, content }),
       });
       const data = (await res.json()) as { note?: Note; error?: string };
       if (!res.ok || !data.note)
         throw new Error(data.error ?? "Erro ao salvar.");
       setNotes((prev) => [data.note as Note, ...prev]);
+      setTitleDraft("");
       setDraft("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar anotação.");
@@ -347,11 +715,11 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     }
   };
 
-  const handleUpdate = useCallback(async (id: string, content: string) => {
+  const handleUpdate = useCallback(async (id: string, title: string, content: string) => {
     const res = await fetch(`/api/notes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ title, content }),
     });
     const data = (await res.json()) as { note?: Note; error?: string };
     if (!res.ok || !data.note)
@@ -381,6 +749,28 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     }
   };
 
+  const handleDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const expansion = expandSlashCodeCommand(
+      event.target.value,
+      event.target.selectionStart,
+      event.target.selectionEnd,
+    );
+
+    if (!expansion) {
+      setDraft(event.target.value);
+      return;
+    }
+
+    setDraft(expansion.value);
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(
+        expansion.caretPosition,
+        expansion.caretPosition,
+      );
+    });
+  };
+
   return (
     <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* compose */}
@@ -389,36 +779,50 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           <StickyNote className="size-3.5" />
           Nova anotação
         </div>
+        <Input
+          value={titleDraft}
+          onChange={(event) => setTitleDraft(event.target.value)}
+          maxLength={160}
+          placeholder="Título da anotação"
+          className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10"
+        />
         <Textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+            ref={textareaRef}
+            value={draft}
+            onChange={handleDraftChange}
           onKeyDown={handleKeyDown}
           placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
           className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10"
           rows={3}
         />
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
+          <Braces className="size-3" />
+          Digite /code ou /json em uma nova linha para inserir um bloco.
+        </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             className="h-11 min-w-0 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:h-8 sm:flex-none sm:text-xs"
             onClick={handleCreate}
-            disabled={submitting || !draft.trim()}
+            disabled={submitting || !titleDraft.trim() || !draft.trim()}
           >
             <Plus className="size-3.5" />
             {submitting ? "Salvando…" : "Salvar anotação"}
           </Button>
-          {draft.trim() && (
+          {(titleDraft.trim() || draft.trim()) && (
             <span className="hidden text-xs text-slate-400 sm:inline">
               Ctrl+Enter para salvar
             </span>
           )}
-          {draft.trim() && (
+          {(titleDraft.trim() || draft.trim()) && (
             <Button
               size="sm"
               variant="ghost"
               className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:px-3 sm:text-xs"
-              onClick={() => setDraft("")}
+              onClick={() => {
+                setTitleDraft("");
+                setDraft("");
+              }}
             >
               <X className="size-3" />
               Limpar
@@ -435,26 +839,67 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       {/* search + tag filters */}
       {notes.length > 0 && (
         <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar anotações…"
-              className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 pr-12 text-base backdrop-blur sm:h-9 sm:pr-10 sm:text-sm dark:border-white/10 dark:bg-white/10"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-0 top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 sm:right-1 sm:size-9"
-                aria-label="Limpar busca"
-                title="Limpar busca"
-              >
-                <X className="size-4" />
-              </button>
-            )}
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar anotações…"
+                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 pr-12 text-base backdrop-blur sm:h-9 sm:pr-10 sm:text-sm dark:border-white/10 dark:bg-white/10"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-0 top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 sm:right-1 sm:size-9"
+                  aria-label="Limpar busca"
+                  title="Limpar busca"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+            <label className="relative block">
+              <span className="sr-only">Criada a partir de</span>
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                type="date"
+                value={createdFrom}
+                max={createdTo || undefined}
+                onChange={(event) => setCreatedFrom(event.target.value)}
+                aria-label="Criada a partir de"
+                title="Criada a partir de"
+                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 text-sm backdrop-blur sm:h-9 dark:border-white/10 dark:bg-white/10"
+              />
+            </label>
+            <label className="relative block">
+              <span className="sr-only">Criada até</span>
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                type="date"
+                value={createdTo}
+                min={createdFrom || undefined}
+                onChange={(event) => setCreatedTo(event.target.value)}
+                aria-label="Criada até"
+                title="Criada até"
+                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 text-sm backdrop-blur sm:h-9 dark:border-white/10 dark:bg-white/10"
+              />
+            </label>
           </div>
+
+          {createdFrom || createdTo ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreatedFrom("");
+                setCreatedTo("");
+              }}
+              className="inline-flex min-h-11 items-center text-xs text-slate-400 underline hover:text-slate-600 sm:min-h-0 dark:hover:text-white/80"
+            >
+              Limpar período de criação
+            </button>
+          ) : null}
 
           {allTags.length > 0 && (
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -493,7 +938,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {search || activeTag ? (
+          {search || activeTag || createdFrom || createdTo ? (
             <p className="text-xs text-slate-400 dark:text-white/35">
               {filtered.length} anotaç{filtered.length === 1 ? "ão" : "ões"}{" "}
               encontrada{filtered.length === 1 ? "" : "s"}
