@@ -12,15 +12,11 @@ create table if not exists public.tasks (
   due_date date,
   planned_for date,
   estimated_minutes integer check (estimated_minutes is null or estimated_minutes > 0),
-  focused_seconds integer not null default 0 check (focused_seconds >= 0),
-  pomodoro_count integer not null default 0 check (pomodoro_count >= 0),
   recurrence text not null default 'none' check (recurrence in ('none', 'daily', 'weekly', 'monthly')),
   recurring_parent_id uuid references public.tasks(id) on delete set null,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
-  updated_at timestamptz not null default now(),
-  pomodoro_minutes integer check (pomodoro_minutes is null or pomodoro_minutes > 0),
-  break_minutes integer check (break_minutes is null or break_minutes > 0)
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.subtasks (
@@ -30,16 +26,6 @@ create table if not exists public.subtasks (
   is_completed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
-create table if not exists public.focus_sessions (
-  id uuid primary key default gen_random_uuid(),
-  task_id uuid not null references public.tasks(id) on delete cascade,
-  started_at timestamptz not null,
-  ended_at timestamptz not null,
-  duration_seconds integer not null check (duration_seconds > 0),
-  completed_cycle boolean not null default true,
-  created_at timestamptz not null default now()
 );
 
 create table if not exists public.task_attachments (
@@ -66,8 +52,6 @@ create index if not exists idx_tasks_priority on public.tasks (priority);
 create index if not exists idx_tasks_category on public.tasks (category);
 create index if not exists idx_tasks_recurrence on public.tasks (recurrence);
 create index if not exists idx_subtasks_task_id on public.subtasks (task_id);
-create index if not exists idx_focus_sessions_task_id on public.focus_sessions (task_id);
-create index if not exists idx_focus_sessions_started_at on public.focus_sessions (started_at);
 create index if not exists idx_task_attachments_task_id on public.task_attachments (task_id);
 
 create or replace function public.set_updated_at()
@@ -95,6 +79,7 @@ execute function public.set_updated_at();
 -- ── notes ──────────────────────────────────────────────────────────────────
 create table if not exists public.notes (
   id uuid primary key default gen_random_uuid(),
+  title text not null,
   content text not null,
   tags text[],
   created_at timestamptz not null default now(),
@@ -118,7 +103,6 @@ alter table public.notes add column if not exists user_id uuid references auth.u
 alter table public.tasks enable row level security;
 alter table public.notes enable row level security;
 alter table public.subtasks enable row level security;
-alter table public.focus_sessions enable row level security;
 alter table public.task_attachments enable row level security;
 
 drop policy if exists "Usuários acessam as próprias tarefas" on public.tasks;
@@ -133,11 +117,6 @@ drop policy if exists "Usuários acessam subtarefas próprias" on public.subtask
 create policy "Usuários acessam subtarefas próprias" on public.subtasks for all to authenticated
 using (exists (select 1 from public.tasks where tasks.id = subtasks.task_id and tasks.user_id = auth.uid()))
 with check (exists (select 1 from public.tasks where tasks.id = subtasks.task_id and tasks.user_id = auth.uid()));
-
-drop policy if exists "Usuários acessam sessões próprias" on public.focus_sessions;
-create policy "Usuários acessam sessões próprias" on public.focus_sessions for all to authenticated
-using (exists (select 1 from public.tasks where tasks.id = focus_sessions.task_id and tasks.user_id = auth.uid()))
-with check (exists (select 1 from public.tasks where tasks.id = focus_sessions.task_id and tasks.user_id = auth.uid()));
 
 drop policy if exists "Usuários acessam anexos próprios" on public.task_attachments;
 create policy "Usuários acessam anexos próprios" on public.task_attachments for all to authenticated

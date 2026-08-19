@@ -18,8 +18,6 @@ interface TaskFormValues {
   planned_for: string;
   estimated_minutes: string;
   recurrence: TaskRecurrence;
-  pomodoro_minutes: string;
-  break_minutes: string;
 }
 
 interface TaskFormProps {
@@ -36,8 +34,6 @@ interface TaskFormProps {
     planned_for?: string | null;
     estimated_minutes?: number | null;
     recurrence?: TaskRecurrence;
-    pomodoro_minutes?: number | null;
-    break_minutes?: number | null;
     attachments?: File[];
   }) => Promise<void>;
 }
@@ -51,8 +47,6 @@ const EMPTY_VALUES: TaskFormValues = {
   planned_for: "",
   estimated_minutes: "",
   recurrence: "none",
-  pomodoro_minutes: "",
-  break_minutes: "",
 };
 
 const compactFieldClass =
@@ -122,8 +116,6 @@ export function TaskForm({
     values.planned_for !== EMPTY_VALUES.planned_for ||
     values.estimated_minutes !== EMPTY_VALUES.estimated_minutes ||
     values.recurrence !== EMPTY_VALUES.recurrence ||
-    values.pomodoro_minutes !== EMPTY_VALUES.pomodoro_minutes ||
-    values.break_minutes !== EMPTY_VALUES.break_minutes ||
     attachments.length > 0;
 
   useEffect(() => {
@@ -170,8 +162,6 @@ export function TaskForm({
         planned_for: values.planned_for || null,
         estimated_minutes: readMinutes(values.estimated_minutes),
         recurrence: values.recurrence,
-        pomodoro_minutes: readMinutes(values.pomodoro_minutes),
-        break_minutes: readMinutes(values.break_minutes),
         attachments: attachments.length ? attachments : undefined,
       });
 
@@ -392,44 +382,6 @@ export function TaskForm({
           </label>
           ) : null}
 
-          {!isCompact ? (
-            <label className="relative min-w-0">
-            <Timer className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={compactFieldClass}
-              type="number"
-              min={1}
-              max={180}
-              placeholder="Foco"
-              value={values.pomodoro_minutes}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  pomodoro_minutes: event.target.value,
-                }))
-              }
-            />
-          </label>
-          ) : null}
-          {!isCompact ? (
-            <label className="relative min-w-0">
-            <Timer className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={compactFieldClass}
-              type="number"
-              min={1}
-              max={60}
-              placeholder="Pausa"
-              value={values.break_minutes}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  break_minutes: event.target.value,
-                }))
-              }
-            />
-          </label>
-          ) : null}
         </div>
 
         {errorMessage ? (

@@ -4,7 +4,6 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type FormEvent,
-  type MouseEvent,
   type Dispatch,
   type SetStateAction,
   useEffect,
@@ -56,12 +55,10 @@ import type {
 
 interface TasksListProps {
   tasks: Task[];
-  selectedTaskId: string | null;
   busyTaskId: string | null;
   isCompact?: boolean;
   categorySuggestions: string[];
   onEditDirtyChange?: (isDirty: boolean) => void;
-  onSelectTask: (taskId: string | null) => void;
   onToggleTask: (task: Task) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
   onUpdateTask: (
@@ -79,10 +76,10 @@ type PriorityFilter = "all" | TaskPriority;
 type DueBucket = "overdue" | "today" | "week" | "later" | "none";
 type TaskSection = DueBucket | "completed";
 
-const taskStatusStorageKey = "taskodoro_task_status_filter";
-const taskViewStorageKey = "taskodoro_task_view_filter";
-const taskPriorityStorageKey = "taskodoro_task_priority_filter";
-const taskCategoryStorageKey = "taskodoro_task_category_filter";
+const taskStatusStorageKey = "taskboard_task_status_filter";
+const taskViewStorageKey = "taskboard_task_view_filter";
+const taskPriorityStorageKey = "taskboard_task_priority_filter";
+const taskCategoryStorageKey = "taskboard_task_category_filter";
 
 interface EditingState {
   title: string;
@@ -156,17 +153,6 @@ function getTodayKey() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
-function formatFocusTime(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  return `${minutes}m`;
-}
-
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -221,7 +207,7 @@ const bucketStyles: Record<TaskSection, string> = {
     "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
 };
 
-const taskOrderStorageKey = "taskodoro_task_order";
+const taskOrderStorageKey = "taskboard_task_order";
 
 function areEqualStringArrays(left: string[], right: string[]) {
   return (
@@ -262,26 +248,12 @@ function saveTaskOrder(order: string[]) {
   window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
 }
 
-function isInteractiveTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return Boolean(
-    target.closest(
-      "button, a, input, textarea, select, label, [role='button'], [data-no-card-select='true']",
-    ),
-  );
-}
-
 export function TasksList({
   tasks,
-  selectedTaskId,
   busyTaskId,
   isCompact = false,
   categorySuggestions,
   onEditDirtyChange,
-  onSelectTask,
   onToggleTask,
   onDeleteTask,
   onUpdateTask,
@@ -703,19 +675,6 @@ export function TasksList({
     handleDragEnd();
   };
 
-  const handleTaskCardClick = (
-    event: MouseEvent<HTMLLIElement>,
-    taskId: string,
-    isActive: boolean,
-    isEditing: boolean,
-  ) => {
-    if (isEditing || isInteractiveTarget(event.target)) {
-      return;
-    }
-
-    onSelectTask(isActive ? null : taskId);
-  };
-
   return (
     <section className="min-w-0 space-y-4">
       <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
@@ -736,28 +695,28 @@ export function TasksList({
               onValueChange={(value) => setStatusFilter(value as TaskFilter)}
               className="w-full min-w-0 touch-pan-x overflow-x-auto pb-1 [scrollbar-width:none] md:w-auto md:pb-0 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             >
-              <TabsList className="grid w-80 min-w-80 grid-cols-4 rounded-full bg-slate-950/[0.06] p-1 group-data-horizontal/tabs:h-12 md:group-data-horizontal/tabs:h-8 dark:bg-white/10">
+              <TabsList className="grid w-[30rem] min-w-[30rem] grid-cols-4 rounded-full bg-slate-950/[0.06] p-1 group-data-horizontal/tabs:h-12 md:group-data-horizontal/tabs:h-8 dark:bg-white/10">
                 <TabsTrigger
                   value="all"
-                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
                 >
                   Todas
                 </TabsTrigger>
                 <TabsTrigger
                   value="pending"
-                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
                 >
                   Pendentes
                 </TabsTrigger>
                 <TabsTrigger
                   value="in_progress"
-                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
                 >
                   Andamento
                 </TabsTrigger>
                 <TabsTrigger
                   value="canceled"
-                  className="min-h-10 touch-manipulation rounded-full md:min-h-0"
+                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
                 >
                   Canceladas
                 </TabsTrigger>
@@ -934,7 +893,6 @@ export function TasksList({
                   >
                   {tasksByBucket.map((task) => {
                     const isCompleted = task.status === "completed";
-                    const isActive = task.id === selectedTaskId;
                     const isBusy = busyTaskId === task.id;
                     const isEditing = editingTaskId === task.id && editingState;
 
@@ -958,14 +916,6 @@ export function TasksList({
                         key={task.id}
                         onDragOver={(event) => handleDragOver(event, task.id)}
                         onDrop={(event) => handleDropOnTask(event, task.id)}
-                        onClick={(event) =>
-                          handleTaskCardClick(
-                            event,
-                            task.id,
-                            isActive,
-                            Boolean(isEditing),
-                          )
-                        }
                         className={[
                           "group min-w-0 border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                           draggingTaskId === task.id
@@ -981,7 +931,6 @@ export function TasksList({
                           isCompleted
                             ? "border-emerald-500/25"
                             : "border-slate-900/10 dark:border-white/10",
-                          isActive ? "ring-2 ring-teal-400/70" : "",
                         ].join(" ")}
                       >
                         <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 md:grid-cols-[auto_auto_minmax(0,1fr)_auto] md:gap-4">
@@ -1083,11 +1032,6 @@ export function TasksList({
                                     ) : null}
                                   </div>
 
-                                  {isActive ? (
-                                    <Badge className="border-teal-500/30 bg-teal-500/15 text-teal-700 dark:text-teal-200">
-                                      Em foco
-                                    </Badge>
-                                  ) : null}
                                 </div>
 
                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1128,17 +1072,6 @@ export function TasksList({
                                   {!isCompact && task.estimated_minutes ? (
                                     <Badge variant="outline">
                                       Est. {task.estimated_minutes}m
-                                    </Badge>
-                                  ) : null}
-                                  {!isCompact ? (
-                                    <Badge variant="outline">
-                                      {formatFocusTime(task.focused_seconds)}{" "}
-                                      foco
-                                    </Badge>
-                                  ) : null}
-                                  {!isCompact ? (
-                                    <Badge variant="outline">
-                                      {task.pomodoro_count} pomodoros
                                     </Badge>
                                   ) : null}
                                   {!isCompact && task.recurrence !== "none" ? (
@@ -1356,21 +1289,6 @@ export function TasksList({
                               aria-label="Excluir tarefa"
                             >
                               <Trash2 className="size-4 text-rose-500" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size={isCompact ? "xs" : "sm"}
-                              className={
-                                isActive
-                                  ? "h-11 min-w-14 touch-manipulation rounded-full bg-teal-500 px-3 text-xs text-white md:h-7 md:min-w-0 md:px-2 hover:bg-teal-600"
-                                  : "h-11 min-w-14 touch-manipulation rounded-full px-3 text-xs md:h-7 md:min-w-0 md:px-2"
-                              }
-                              variant={isActive ? "default" : "outline"}
-                              onClick={() =>
-                                onSelectTask(isActive ? null : task.id)
-                              }
-                            >
-                              {isActive ? "Ativa" : "Foco"}
                             </Button>
                             {!isCompact &&
                             task.status !== "completed" &&

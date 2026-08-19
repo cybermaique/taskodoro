@@ -65,9 +65,6 @@ export async function POST(request: NextRequest) {
       estimated_minutes:
         typeof body.estimated_minutes === "number" ? body.estimated_minutes : null,
       recurrence,
-      pomodoro_minutes:
-        typeof body.pomodoro_minutes === "number" ? body.pomodoro_minutes : null,
-      break_minutes: typeof body.break_minutes === "number" ? body.break_minutes : null,
     });
 
     return NextResponse.json({ task }, { status: 201 });

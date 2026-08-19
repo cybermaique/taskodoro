@@ -20,10 +20,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
+      title?: string;
       content?: string;
       tags?: string[];
     };
     const note = await createNote({
+      title: body.title ?? "",
       content: body.content ?? "",
       tags: body.tags ?? null,
     });

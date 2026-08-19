@@ -11,16 +11,6 @@ export interface Subtask {
   updated_at: string;
 }
 
-export interface FocusSession {
-  id: string;
-  task_id: string;
-  started_at: string;
-  ended_at: string;
-  duration_seconds: number;
-  completed_cycle: boolean;
-  created_at: string;
-}
-
 export interface TaskAttachment {
   id: string;
   task_id: string;
@@ -40,18 +30,13 @@ export interface Task {
   due_date: string | null;
   planned_for: string | null;
   estimated_minutes: number | null;
-  focused_seconds: number;
-  pomodoro_count: number;
   recurrence: TaskRecurrence;
   recurring_parent_id: string | null;
   created_at: string;
   completed_at: string | null;
   updated_at: string;
-  pomodoro_minutes: number | null;
-  break_minutes: number | null;
   attachments: TaskAttachment[];
   subtasks: Subtask[];
-  focus_sessions: FocusSession[];
 }
 
 export type TaskFilter = "all" | TaskStatus;
@@ -73,8 +58,6 @@ export interface CreateTaskInput {
   planned_for?: string | null;
   estimated_minutes?: number | null;
   recurrence?: TaskRecurrence;
-  pomodoro_minutes?: number | null;
-  break_minutes?: number | null;
 }
 
 export interface UpdateTaskInput {
@@ -86,11 +69,7 @@ export interface UpdateTaskInput {
   due_date?: string | null;
   planned_for?: string | null;
   estimated_minutes?: number | null;
-  focused_seconds?: number;
-  pomodoro_count?: number;
   recurrence?: TaskRecurrence;
-  pomodoro_minutes?: number | null;
-  break_minutes?: number | null;
 }
 
 export interface CreateSubtaskInput {

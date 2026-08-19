@@ -4,7 +4,6 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type {
   CreateSubtaskInput,
   CreateTaskInput,
-  FocusSession,
   Subtask,
   Task,
   TaskAttachment,
@@ -25,15 +24,11 @@ const TASK_COLUMNS = `
   due_date,
   planned_for,
   estimated_minutes,
-  focused_seconds,
-  pomodoro_count,
   recurrence,
   recurring_parent_id,
   created_at,
   completed_at,
   updated_at,
-  pomodoro_minutes,
-  break_minutes,
   task_attachments(
     id,
     task_id,
@@ -50,20 +45,9 @@ const TASK_COLUMNS = `
     created_at,
     updated_at
   ),
-  focus_sessions(
-    id,
-    task_id,
-    started_at,
-    ended_at,
-    duration_seconds,
-    completed_cycle,
-    created_at
-  )
 `;
 
 const SUBTASK_COLUMNS = "id,task_id,title,is_completed,created_at,updated_at";
-const FOCUS_SESSION_COLUMNS =
-  "id,task_id,started_at,ended_at,duration_seconds,completed_cycle,created_at";
 
 function normalizeNullableMinutes(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -156,8 +140,6 @@ function mapTask(task: Task): Task {
 
   return {
     ...task,
-    focused_seconds: task.focused_seconds ?? 0,
-    pomodoro_count: task.pomodoro_count ?? 0,
     recurrence: task.recurrence ?? "none",
     attachments: Array.isArray(rawTask.task_attachments)
       ? rawTask.task_attachments
@@ -166,12 +148,6 @@ function mapTask(task: Task): Task {
       ? [...task.subtasks].sort(
           (left, right) =>
             new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
-        )
-      : [],
-    focus_sessions: Array.isArray(task.focus_sessions)
-      ? [...task.focus_sessions].sort(
-          (left, right) =>
-            new Date(right.started_at).getTime() - new Date(left.started_at).getTime(),
         )
       : [],
   };
@@ -258,8 +234,7 @@ export async function listTasks() {
     .from("tasks")
     .select(TASK_COLUMNS)
     .order("created_at", { ascending: false })
-    .order("created_at", { foreignTable: "subtasks", ascending: true })
-    .order("started_at", { foreignTable: "focus_sessions", ascending: false });
+    .order("created_at", { foreignTable: "subtasks", ascending: true });
 
   if (error) {
     throw new Error(error.message);
@@ -296,10 +271,6 @@ export async function createTask(input: CreateTaskInput) {
     estimated_minutes: normalizeNullableMinutes(input.estimated_minutes),
     recurrence: normalizeRecurrence(input.recurrence),
     completed_at: null,
-    focused_seconds: 0,
-    pomodoro_count: 0,
-    pomodoro_minutes: normalizeNullableMinutes(input.pomodoro_minutes),
-    break_minutes: normalizeNullableMinutes(input.break_minutes),
   };
 
   const { data, error } = await supabase
@@ -354,24 +325,8 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
     updatePayload.estimated_minutes = normalizeNullableMinutes(input.estimated_minutes);
   }
 
-  if (input.focused_seconds !== undefined) {
-    updatePayload.focused_seconds = Math.max(0, Math.floor(input.focused_seconds));
-  }
-
-  if (input.pomodoro_count !== undefined) {
-    updatePayload.pomodoro_count = Math.max(0, Math.floor(input.pomodoro_count));
-  }
-
   if (input.recurrence !== undefined) {
     updatePayload.recurrence = normalizeRecurrence(input.recurrence);
-  }
-
-  if (input.pomodoro_minutes !== undefined) {
-    updatePayload.pomodoro_minutes = normalizeNullableMinutes(input.pomodoro_minutes);
-  }
-
-  if (input.break_minutes !== undefined) {
-    updatePayload.break_minutes = normalizeNullableMinutes(input.break_minutes);
   }
 
   if (!Object.keys(updatePayload).length) {
@@ -417,8 +372,6 @@ async function createNextRecurringTask(task: Task) {
     estimated_minutes: task.estimated_minutes,
     recurrence,
     recurring_parent_id: task.recurring_parent_id ?? task.id,
-    pomodoro_minutes: task.pomodoro_minutes,
-    break_minutes: task.break_minutes,
   });
 
   if (error) {
@@ -518,44 +471,4 @@ export async function deleteSubtask(id: string) {
   if (error) {
     throw new Error(error.message);
   }
-}
-
-export async function recordFocusSession({
-  taskId,
-  durationSeconds,
-  completedCycle,
-}: {
-  taskId: string;
-  durationSeconds: number;
-  completedCycle: boolean;
-}) {
-  const supabase = await createSupabaseServerClient();
-  const duration = Math.max(1, Math.floor(durationSeconds));
-  const endedAt = new Date();
-  const startedAt = new Date(endedAt.getTime() - duration * 1000);
-
-  const { data, error } = await supabase
-    .from("focus_sessions")
-    .insert({
-      task_id: taskId,
-      started_at: startedAt.toISOString(),
-      ended_at: endedAt.toISOString(),
-      duration_seconds: duration,
-      completed_cycle: completedCycle,
-    })
-    .select(FOCUS_SESSION_COLUMNS)
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const task = await getTaskById(taskId);
-  await updateTask(taskId, {
-    focused_seconds: task.focused_seconds + duration,
-    pomodoro_count: task.pomodoro_count + (completedCycle ? 1 : 0),
-    status: task.status === "pending" ? "in_progress" : task.status,
-  });
-
-  return data as FocusSession;
 }

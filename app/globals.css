@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant comfort (&:is(.comfort *));
 
 @theme inline {
   --color-background: var(--background);
@@ -167,18 +168,62 @@
   }
 }
 
+.comfort {
+  color-scheme: light;
+  --background: oklch(0.955 0.026 82);
+  --foreground: oklch(0.255 0.035 60);
+  --card: oklch(0.985 0.018 82);
+  --card-foreground: oklch(0.255 0.035 60);
+  --popover: oklch(0.99 0.014 82);
+  --popover-foreground: oklch(0.255 0.035 60);
+  --primary: oklch(0.405 0.08 58);
+  --primary-foreground: oklch(0.985 0.018 82);
+  --secondary: oklch(0.91 0.035 80);
+  --secondary-foreground: oklch(0.31 0.045 60);
+  --muted: oklch(0.925 0.025 80);
+  --muted-foreground: oklch(0.48 0.04 63);
+  --accent: oklch(0.89 0.05 76);
+  --accent-foreground: oklch(0.29 0.05 60);
+  --destructive: oklch(0.54 0.17 27);
+  --border: oklch(0.82 0.035 76);
+  --input: oklch(0.82 0.035 76);
+  --ring: oklch(0.58 0.08 60);
+  --sidebar: oklch(0.94 0.028 82);
+  --sidebar-foreground: oklch(0.255 0.035 60);
+  --sidebar-primary: oklch(0.405 0.08 58);
+  --sidebar-primary-foreground: oklch(0.985 0.018 82);
+  --sidebar-accent: oklch(0.89 0.05 76);
+  --sidebar-accent-foreground: oklch(0.29 0.05 60);
+  --sidebar-border: oklch(0.82 0.035 76);
+  --sidebar-ring: oklch(0.58 0.08 60);
+}
+
+/* Keep the comfort theme distinct even in components with explicit utility colors. */
+.comfort main {
+  background: linear-gradient(180deg, #ead3a1 0%, #f5e7c9 48%, #e8d1a2 100%) !important;
+  color: #3d2b18;
+}
+
+.comfort main :is(.rounded-2xl.border, .rounded-3xl.border, [data-slot="tabs-list"], [data-slot="dialog-content"]) {
+  background-color: rgb(255 247 226 / 88%) !important;
+  border-color: rgb(139 101 48 / 24%) !important;
+}
+
+.comfort main :is(input, textarea, [data-slot="select-trigger"]) {
+  background-color: #fffaf0 !important;
+  border-color: rgb(139 101 48 / 28%) !important;
+}
+
+.comfort main [data-slot="tabs-trigger"][data-active] {
+  background-color: #fffdf7 !important;
+  color: #3d2b18 !important;
+}
+
 @layer utilities {
   .dashboard-safe-insets {
     padding-top: max(0.5rem, var(--safe-area-top));
     padding-right: max(1rem, var(--safe-area-right));
     padding-bottom: max(1.25rem, var(--safe-area-bottom));
-    padding-left: max(1rem, var(--safe-area-left));
-  }
-
-  .focus-safe-insets {
-    padding-top: max(1rem, var(--safe-area-top));
-    padding-right: max(1rem, var(--safe-area-right));
-    padding-bottom: max(1rem, var(--safe-area-bottom));
     padding-left: max(1rem, var(--safe-area-left));
   }
 
@@ -205,10 +250,4 @@
     padding-left: max(2rem, var(--safe-area-left));
   }
 
-  .focus-safe-insets {
-    padding-top: max(2rem, var(--safe-area-top));
-    padding-right: max(2rem, var(--safe-area-right));
-    padding-bottom: max(2rem, var(--safe-area-bottom));
-    padding-left: max(2rem, var(--safe-area-left));
-  }
 }
