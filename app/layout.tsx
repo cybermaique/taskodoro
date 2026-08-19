@@ -16,8 +16,8 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Taskodoro",
-  description: "Dashboard pessoal de produtividade com tarefas e Pomodoro.",
+  title: "Taskboard",
+  description: "Organizador pessoal de tarefas e anotações.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",

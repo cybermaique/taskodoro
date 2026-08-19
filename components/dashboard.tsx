@@ -1,32 +1,25 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
-  BellRing,
   CheckCircle2,
   CircleDot,
   ListTodo,
   MoveRight,
   StickyNote,
-  Target,
 } from "lucide-react";
 
 import { NotesPanel } from "@/components/notes-panel";
-import { PomodoroPanel } from "@/components/pomodoro-panel";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePomodoro } from "@/hooks/use-pomodoro";
 import type { Note } from "@/types/note";
-import type { PomodoroPhase } from "@/types/pomodoro";
 import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
 
-const APP_TITLE = "Taskodoro";
+const APP_TITLE = "Taskboard";
 const DEFAULT_CATEGORIES = [
   "trabalho",
   "pessoal",
@@ -75,77 +68,13 @@ function startOfWeek(date: Date) {
   return next;
 }
 
-function formatFocusTime(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  return `${minutes}m`;
-}
-
-function playAlertTone() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const Context =
-    window.AudioContext ||
-    (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-      .webkitAudioContext;
-
-  if (!Context) {
-    return;
-  }
-
-  const globalWindow = window as typeof window & {
-    __taskodoroAlertAudioContext?: AudioContext;
-  };
-  const context = globalWindow.__taskodoroAlertAudioContext ?? new Context();
-  globalWindow.__taskodoroAlertAudioContext = context;
-  if (context.state === "suspended") {
-    context.resume().catch(() => null);
-  }
-  const duration = 0.18;
-
-  [0, 0.25, 0.5].forEach((offset, index) => {
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-
-    oscillator.type = "sine";
-    oscillator.frequency.value = index === 2 ? 680 : 520;
-
-    gainNode.gain.setValueAtTime(0.001, context.currentTime + offset);
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.25,
-      context.currentTime + offset + 0.02,
-    );
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.001,
-      context.currentTime + offset + duration,
-    );
-
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-
-    oscillator.start(context.currentTime + offset);
-    oscillator.stop(context.currentTime + offset + duration);
-  });
-}
-
-function phaseText(phase: PomodoroPhase) {
-  return phase === "focus" ? "foco" : "descanso";
-}
-
 interface DashboardProps {
   initialTasks: Task[];
   initialNotes: Note[];
 }
 
 type DisplayMode = "full" | "compact";
-type DashboardTab = "task-form" | "execution" | "notes";
+type DashboardTab = "task-form" | "tasks" | "notes";
 
 export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>(() =>
@@ -156,55 +85,29 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   const [hasUnsavedTaskEdit, setHasUnsavedTaskEdit] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [completionMessage, setCompletionMessage] = useState<string | null>(
-    null,
-  );
-  const [isBlinkingTitle, setIsBlinkingTitle] = useState(false);
-  const [focusModeOpen, setFocusModeOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
     if (typeof window === "undefined") {
       return "full";
     }
 
-    return window.localStorage.getItem("taskodoro_display_mode") === "compact"
+    return window.localStorage.getItem("taskboard_display_mode") === "compact"
       ? "compact"
       : "full";
   });
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
     if (typeof window === "undefined") {
-      return "execution";
+      return "tasks";
     }
 
-    const stored = window.localStorage.getItem("taskodoro_selected_tab");
+    const stored = window.localStorage.getItem("taskboard_selected_tab");
     return stored === "task-form" ||
-      stored === "execution" ||
+      stored === "tasks" ||
       stored === "notes"
       ? stored
-      : "execution";
+      : "tasks";
   });
-  const selectedTaskIdRef = useRef<string | null>(null);
-  const alertToneIntervalRef = useRef<number | null>(null);
   const isCompact = displayMode === "compact";
   const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
-
-  const stopContinuousAlert = useCallback(() => {
-    if (alertToneIntervalRef.current !== null) {
-      window.clearInterval(alertToneIntervalRef.current);
-      alertToneIntervalRef.current = null;
-    }
-    setIsBlinkingTitle(false);
-  }, []);
-
-  const startContinuousAlert = useCallback(() => {
-    if (alertToneIntervalRef.current !== null) {
-      window.clearInterval(alertToneIntervalRef.current);
-    }
-
-    playAlertTone();
-    alertToneIntervalRef.current = window.setInterval(() => {
-      playAlertTone();
-    }, 1500);
-  }, []);
 
   const categorySuggestions = useMemo(() => {
     const fromTasks = tasks
@@ -214,92 +117,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     return Array.from(new Set([...DEFAULT_CATEGORIES, ...fromTasks]));
   }, [tasks]);
 
-  const recordFocusCycle = useCallback(
-    async (
-      taskId: string,
-      durationSeconds: number,
-      completedCycle: boolean,
-    ) => {
-      const response = await fetch(`/api/tasks/${taskId}/focus-sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          duration_seconds: durationSeconds,
-          completed_cycle: completedCycle,
-        }),
-      });
-
-      const data = (await response.json()) as { task?: Task; error?: string };
-
-      if (!response.ok || !data.task) {
-        throw new Error(data.error ?? "Não foi possível registrar o foco.");
-      }
-
-      setTasks((current) => upsertTask(current, data.task as Task));
-    },
-    [],
-  );
-
-  const onPhaseFinished = useCallback(
-    (
-      finishedPhase: PomodoroPhase,
-      nextPhase: PomodoroPhase,
-      durationSeconds: number,
-    ) => {
-      const message =
-        finishedPhase === "focus"
-          ? "Foco concluído! Hora de fazer uma pausa curta."
-          : "Pausa concluída! Pronto para voltar ao foco.";
-
-      setCompletionMessage(message);
-      setIsBlinkingTitle(true);
-      startContinuousAlert();
-
-      if (finishedPhase === "focus" && selectedTaskIdRef.current) {
-        recordFocusCycle(
-          selectedTaskIdRef.current,
-          durationSeconds,
-          true,
-        ).catch((error) => {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Erro ao registrar sessão de foco.",
-          );
-        });
-      }
-
-      if (typeof window !== "undefined" && "Notification" in window) {
-        const notify = () => {
-          new window.Notification("Pomodoro", {
-            body: `Ciclo de ${phaseText(finishedPhase)} finalizado. Próximo: ${phaseText(nextPhase)}.`,
-          });
-        };
-
-        if (window.Notification.permission === "granted") {
-          notify();
-        } else if (window.Notification.permission === "default") {
-          window.Notification.requestPermission().then((permission) => {
-            if (permission === "granted") {
-              notify();
-            }
-          });
-        }
-      }
-    },
-    [recordFocusCycle, startContinuousAlert],
-  );
-
-  const pomodoro = usePomodoro({ onPhaseFinished });
-
   useEffect(() => {
-    selectedTaskIdRef.current = pomodoro.selectedTaskId;
-  }, [pomodoro.selectedTaskId]);
-
-  useEffect(() => {
-    window.localStorage.setItem("taskodoro_display_mode", displayMode);
+    window.localStorage.setItem("taskboard_display_mode", displayMode);
   }, [displayMode]);
 
   useEffect(() => {
@@ -315,21 +134,13 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   }, [hasUnsavedTaskChanges]);
 
   useEffect(() => {
-    window.localStorage.setItem("taskodoro_selected_tab", selectedTab);
+    window.localStorage.setItem("taskboard_selected_tab", selectedTab);
   }, [selectedTab]);
-
-  const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === pomodoro.selectedTaskId) ?? null,
-    [pomodoro.selectedTaskId, tasks],
-  );
 
   const dashboardStats = useMemo(() => {
     const todayKey = toDateKey(new Date());
     const weekStart = startOfWeek(new Date());
     const pending = tasks.filter((task) => task.status === "pending").length;
-    const inProgress = tasks.filter(
-      (task) => task.status === "in_progress",
-    ).length;
     const completed = tasks.filter(
       (task) => task.status === "completed",
     ).length;
@@ -340,47 +151,18 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         task.due_date &&
         task.due_date < todayKey,
     ).length;
-    const completedToday = tasks.filter(
-      (task) =>
-        task.status === "completed" &&
-        task.completed_at &&
-        task.completed_at.slice(0, 10) === todayKey,
-    ).length;
     const completedWeek = tasks.filter(
       (task) =>
         task.status === "completed" &&
         task.completed_at &&
         new Date(task.completed_at) >= weekStart,
     ).length;
-    const focusSessions = tasks.flatMap((task) => task.focus_sessions);
-    const todaySessions = focusSessions.filter(
-      (session) => session.started_at.slice(0, 10) === todayKey,
-    );
-    const weekSessions = focusSessions.filter(
-      (session) => new Date(session.started_at) >= weekStart,
-    );
-    const focusToday = todaySessions.reduce(
-      (total, session) => total + session.duration_seconds,
-      0,
-    );
-    const focusWeek = weekSessions.reduce(
-      (total, session) => total + session.duration_seconds,
-      0,
-    );
 
     return {
       pending,
-      inProgress,
       completed,
       overdue,
-      completedToday,
       completedWeek,
-      focusToday,
-      focusWeek,
-      pomodorosToday: todaySessions.filter((session) => session.completed_cycle)
-        .length,
-      pomodorosWeek: weekSessions.filter((session) => session.completed_cycle)
-        .length,
       dueToday: tasks.filter(
         (task) =>
           task.status !== "completed" &&
@@ -389,58 +171,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       ).length,
     };
   }, [tasks]);
-
-  useEffect(() => {
-    if (!isBlinkingTitle) {
-      document.title = APP_TITLE;
-      return;
-    }
-
-    let active = false;
-    const interval = window.setInterval(() => {
-      document.title = active ? APP_TITLE : "â° Ciclo finalizado";
-      active = !active;
-    }, 700);
-
-    return () => {
-      window.clearInterval(interval);
-      document.title = APP_TITLE;
-    };
-  }, [isBlinkingTitle]);
-
-  useEffect(() => {
-    if (!isBlinkingTitle) {
-      return;
-    }
-
-    const stopBlink = () => stopContinuousAlert();
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        stopBlink();
-      }
-    };
-
-    window.addEventListener("click", stopBlink, { once: true });
-    window.addEventListener("keydown", stopBlink, { once: true });
-    window.addEventListener("focus", stopBlink, { once: true });
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("click", stopBlink);
-      window.removeEventListener("keydown", stopBlink);
-      window.removeEventListener("focus", stopBlink);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [isBlinkingTitle, stopContinuousAlert]);
-
-  useEffect(() => {
-    return () => {
-      if (alertToneIntervalRef.current !== null) {
-        window.clearInterval(alertToneIntervalRef.current);
-      }
-    };
-  }, []);
 
   const createTask = async (values: {
     title: string;
@@ -451,8 +181,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     planned_for?: string | null;
     estimated_minutes?: number | null;
     recurrence?: TaskRecurrence;
-    pomodoro_minutes?: number | null;
-    break_minutes?: number | null;
     attachments?: File[];
   }) => {
     setCreatingTask(true);
@@ -489,9 +217,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => upsertTask(current, createdTask));
-      if (!pomodoro.selectedTaskId) {
-        pomodoro.setSelectedTaskId(createdTask.id);
-      }
     } finally {
       setCreatingTask(false);
     }
@@ -569,10 +294,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => current.filter((task) => task.id !== taskId));
-
-      if (pomodoro.selectedTaskId === taskId) {
-        pomodoro.setSelectedTaskId(null);
-      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Erro ao excluir tarefa.",
@@ -715,38 +436,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     );
   };
 
-  const handleUserInteraction = () => {
-    setIsBlinkingTitle(false);
-
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (window.Notification.permission === "default") {
-        window.Notification.requestPermission().catch(() => null);
-      }
-    }
-  };
-
-  const handleSelectTask = (taskId: string | null) => {
-    pomodoro.setSelectedTaskId(taskId);
-
-    if (!taskId) {
-      return;
-    }
-
-    const task = tasks.find((item) => item.id === taskId);
-
-    if (!task) {
-      return;
-    }
-
-    if (task.pomodoro_minutes) {
-      pomodoro.setFocusMinutes(task.pomodoro_minutes);
-    }
-
-    if (task.break_minutes) {
-      pomodoro.setBreakMinutes(task.break_minutes);
-    }
-  };
-
   const handleTabChange = (value: string) => {
     const nextTab = value as DashboardTab;
     if (
@@ -760,113 +449,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     setSelectedTab(nextTab);
   };
 
-  const pomodoroPanel = (
-    <PomodoroPanel
-      selectedTask={selectedTask}
-      phase={pomodoro.phase}
-      status={pomodoro.status}
-      remainingSeconds={pomodoro.remainingSeconds}
-      focusMinutes={pomodoro.focusMinutes}
-      breakMinutes={pomodoro.breakMinutes}
-      onSetFocusMinutes={pomodoro.setFocusMinutes}
-      onSetBreakMinutes={pomodoro.setBreakMinutes}
-      onStart={pomodoro.start}
-      onPause={pomodoro.pause}
-      onResume={pomodoro.resume}
-      onReset={pomodoro.reset}
-      onFinishFocus={pomodoro.finishFocus}
-      onSkipToBreak={pomodoro.skipToBreak}
-      onUserInteraction={handleUserInteraction}
-      isCompact={isCompact}
-    />
-  );
-
-  if (focusModeOpen && selectedTask) {
-    return (
-      <main className="focus-safe-insets min-h-svh overflow-x-clip bg-zinc-950 text-white">
-        <div className="mx-auto grid w-full min-w-0 max-w-6xl gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <section className="order-2 min-w-0 rounded-3xl border border-white/10 bg-white/[0.06] p-4 sm:rounded-[28px] sm:p-5 lg:order-1">
-            <Button
-              variant="ghost"
-              className="mb-5 min-h-11 max-w-full justify-start whitespace-normal text-left text-white hover:bg-white/10 sm:mb-6 sm:min-h-8"
-              onClick={() => setFocusModeOpen(false)}
-            >
-              <ArrowLeft className="size-4" />
-              Voltar para lista
-            </Button>
-            <p className="text-sm uppercase text-teal-200/70">Modo foco</p>
-            <h1 className="mt-2 break-words text-3xl font-semibold leading-tight sm:text-4xl">
-              {selectedTask.title}
-            </h1>
-            {selectedTask.description ? (
-              <p className="mt-4 max-w-2xl break-words text-white/60">
-                {selectedTask.description}
-              </p>
-            ) : null}
-            <div className="mt-6 space-y-3 sm:mt-8">
-              <h2 className="text-sm font-semibold uppercase text-white/50">
-                Subtarefas
-              </h2>
-              {selectedTask.subtasks.length ? (
-                selectedTask.subtasks.map((subtask) => (
-                  <label
-                    key={subtask.id}
-                    className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/10 p-3"
-                  >
-                    <Checkbox
-                      className="shrink-0"
-                      checked={subtask.is_completed}
-                      onCheckedChange={() =>
-                        toggleSubtask(subtask.id, !subtask.is_completed)
-                      }
-                    />
-                    <span
-                      className={[
-                        "min-w-0 break-words",
-                        subtask.is_completed
-                          ? "text-white/35 line-through"
-                          : "",
-                      ].join(" ")}
-                    >
-                      {subtask.title}
-                    </span>
-                  </label>
-                ))
-              ) : (
-                <p className="text-white/45">
-                  Sem subtarefas para esta tarefa.
-                </p>
-              )}
-            </div>
-            <div className="mt-6 grid gap-2 sm:mt-8 sm:flex sm:flex-wrap">
-              <Button
-                className="min-h-11 w-full bg-emerald-400 text-emerald-950 hover:bg-emerald-300 sm:min-h-8 sm:w-auto"
-                onClick={() =>
-                  updateTaskWithBusy(selectedTask.id, { status: "completed" })
-                }
-              >
-                <CheckCircle2 className="size-4" />
-                Concluir tarefa
-              </Button>
-              <Button
-                variant="outline"
-                className="min-h-11 w-full border-white/10 bg-white/10 text-white hover:bg-white/15 sm:min-h-8 sm:w-auto"
-                onClick={() =>
-                  updateTaskWithBusy(selectedTask.id, { status: "in_progress" })
-                }
-              >
-                Marcar em andamento
-              </Button>
-            </div>
-          </section>
-          <div className="order-1 min-w-0 lg:order-2">{pomodoroPanel}</div>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
+    <main className="min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
       <div className="dashboard-safe-insets mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4 sm:gap-6">
         <header
           className={[
@@ -877,8 +461,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
           <div className={isCompact ? "hidden" : "min-w-0 space-y-3"}>
             {!isCompact ? (
               <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase leading-tight text-slate-600 shadow-sm sm:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white/60">
-                <Target className="size-3.5" />
-                <span className="min-w-0">Foco pessoal e profissional</span>
+                <ListTodo className="size-3.5" />
+                <span className="min-w-0">Organização pessoal e profissional</span>
               </div>
             ) : null}
             <div>
@@ -890,7 +474,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               {!isCompact ? (
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-white/55">
                   Organize prioridades, quebre tarefas em passos menores e
-                  mantenha o ritmo com Pomodoro.
+                  mantenha suas anotações sempre à mão.
                 </p>
               ) : null}
             </div>
@@ -941,27 +525,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
           </div>
         </header>
 
-        {completionMessage ? (
-          <Alert className="border-teal-500/30 bg-teal-500/10">
-            <BellRing className="size-4" />
-            <AlertTitle>Alerta do Pomodoro</AlertTitle>
-            <AlertDescription className="flex flex-wrap items-center gap-3">
-              <span>{completionMessage}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setCompletionMessage(null);
-                  pomodoro.clearCompletionAlert();
-                  stopContinuousAlert();
-                }}
-              >
-                Entendi
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
         {errorMessage ? (
           <Alert variant="destructive">
             <AlertTitle>Erro</AlertTitle>
@@ -987,13 +550,12 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               <span className="hidden sm:inline">Nova tarefa</span>
             </TabsTrigger>
             <TabsTrigger
-              value="execution"
-              aria-label="Tarefas e foco"
+              value="tasks"
+              aria-label="Tarefas"
               className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
             >
               <ListTodo className="size-4" />
-              <span className="sm:hidden">Foco</span>
-              <span className="hidden sm:inline">Tarefas e foco</span>
+              <span>Tarefas</span>
             </TabsTrigger>
             <TabsTrigger
               value="notes"
@@ -1016,16 +578,11 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             />
           </TabsContent>
 
-          <TabsContent value="execution" className="min-w-0">
-            <section className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-              <div
-                className={[
-                  "order-2 min-w-0 lg:order-1",
-                  isCompact ? "space-y-0" : "space-y-5",
-                ].join(" ")}
-              >
+          <TabsContent value="tasks" className="min-w-0">
+            <section className="min-w-0">
+              <div className={isCompact ? "space-y-0" : "space-y-5"}>
                 {!isCompact ? (
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
                     <MiniMetric
                       title="Hoje"
                       value={dashboardStats.dueToday}
@@ -1037,13 +594,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                       caption="pedem atenção"
                     />
                     <MiniMetric
-                      title="Foco hoje"
-                      value={formatFocusTime(dashboardStats.focusToday)}
-                      caption={`${dashboardStats.pomodorosToday} pomodoros`}
-                    />
-                    <MiniMetric
                       title="Semana"
-                      value={formatFocusTime(dashboardStats.focusWeek)}
+                      value={dashboardStats.completedWeek}
                       caption={`${dashboardStats.completedWeek} concluídas`}
                     />
                   </div>
@@ -1051,15 +603,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
                 {!isCompact ? (
                   <div className="grid gap-2 sm:flex sm:flex-wrap">
-                    <Button
-                      variant="outline"
-                      className="min-h-11 w-full rounded-full sm:min-h-8 sm:w-auto"
-                      onClick={() => setFocusModeOpen(Boolean(selectedTask))}
-                      disabled={!selectedTask}
-                    >
-                      <Target className="size-4" />
-                      Modo foco
-                    </Button>
                     <Button
                       variant="outline"
                       className="min-h-11 w-full rounded-full whitespace-normal sm:min-h-8 sm:w-auto"
@@ -1073,12 +616,10 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
                 <TasksList
                   tasks={tasks}
-                  selectedTaskId={pomodoro.selectedTaskId}
                   busyTaskId={busyTaskId}
                   isCompact={isCompact}
                   categorySuggestions={categorySuggestions}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
-                  onSelectTask={handleSelectTask}
                   onToggleTask={toggleTask}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
@@ -1088,10 +629,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                   onToggleSubtask={toggleSubtask}
                   onDeleteSubtask={deleteSubtask}
                 />
-              </div>
-
-              <div className="order-1 min-w-0 lg:order-2">
-                {pomodoroPanel}
               </div>
             </section>
           </TabsContent>

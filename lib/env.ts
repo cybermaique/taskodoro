@@ -19,4 +19,4 @@ export const env = {
   APP_PASSWORD: process.env.APP_PASSWORD?.trim() ?? "",
 };
 
-export const accessCookieName = "pomodoro_access";
+export const accessCookieName = "taskboard_access";
