@@ -64,18 +64,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             ? null
             : undefined,
       recurrence,
-      pomodoro_minutes:
-        typeof body.pomodoro_minutes === "number"
-          ? body.pomodoro_minutes
-          : body.pomodoro_minutes === null
-            ? null
-            : undefined,
-      break_minutes:
-        typeof body.break_minutes === "number"
-          ? body.break_minutes
-          : body.break_minutes === null
-            ? null
-            : undefined,
     });
 
     return NextResponse.json({ task });

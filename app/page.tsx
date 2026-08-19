@@ -1,5 +1,5 @@
 import { AccessGate } from "@/components/access-gate";
-import { Dashboard } from "@/components/dashboard";
+import { DashboardDataLoader } from "@/components/dashboard-data-loader";
 import { listNotes } from "@/lib/notes";
 import { listTasks } from "@/lib/tasks";
 import type { Note } from "@/types/note";
@@ -16,5 +16,12 @@ async function getInitialData() {
 
 export default async function HomePage() {
   const { tasks, notes } = await getInitialData();
-  return <AccessGate><Dashboard initialTasks={tasks} initialNotes={notes} /></AccessGate>;
+  return (
+    <AccessGate>
+      <DashboardDataLoader
+        initialTasks={tasks}
+        initialNotes={notes}
+      />
+    </AccessGate>
+  );
 }
