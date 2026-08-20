@@ -15,9 +15,12 @@ import {
   Tag,
   Trash2,
   X,
+  Loader2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +47,9 @@ function formatDateTime(iso: string) {
 }
 
 function hasBeenUpdated(note: Note) {
-  return new Date(note.updated_at).getTime() !== new Date(note.created_at).getTime();
+  return (
+    new Date(note.updated_at).getTime() !== new Date(note.created_at).getTime()
+  );
 }
 
 function formatJsonIfValid(content: string) {
@@ -146,7 +151,9 @@ function isCreatedWithinRange(note: Note, from: string, to: string) {
 function isNoteCardControl(target: EventTarget | null) {
   if (!(target instanceof Element)) return false;
   return Boolean(
-    target.closest("button, a, input, textarea, select, label, summary, details"),
+    target.closest(
+      "button, a, input, textarea, select, label, summary, details",
+    ),
   );
 }
 
@@ -182,7 +189,9 @@ function CodeBlock({
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
           <Braces className="size-4 text-violet-300" />
           <span>{label}</span>
-          <span className="text-xs font-normal text-slate-400">· {lineCount} linhas</span>
+          <span className="text-xs font-normal text-slate-400">
+            · {lineCount} linhas
+          </span>
           <span className="ml-auto text-xs font-normal text-slate-400 group-open/code:hidden">
             Expandir
           </span>
@@ -260,6 +269,7 @@ function NoteCard({
   const [draft, setDraft] = useState(note.content);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -286,7 +296,10 @@ function NoteCard({
 
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node) || viewerPopupRef.current?.contains(target)) {
+      if (
+        !(target instanceof Node) ||
+        viewerPopupRef.current?.contains(target)
+      ) {
         return;
       }
 
@@ -295,11 +308,18 @@ function NoteCard({
 
     document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
     return () =>
-      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+      document.removeEventListener(
+        "pointerdown",
+        closeOnOutsidePointerDown,
+        true,
+      );
   }, [viewerOpen]);
 
   const tags = extractHashtags(note.content);
-  const contentBlocks = useMemo(() => parseNoteContent(note.content), [note.content]);
+  const contentBlocks = useMemo(
+    () => parseNoteContent(note.content),
+    [note.content],
+  );
   const contentLineCount = note.content.split(/\r?\n/).length;
   const useFullscreenViewer =
     note.content.length > 1600 || contentLineCount > 30;
@@ -336,7 +356,9 @@ function NoteCard({
     }
   };
 
-  const handleEditDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleEditDraftChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
     const expansion = expandSlashCodeCommand(
       event.target.value,
       event.target.selectionStart,
@@ -446,7 +468,9 @@ function NoteCard({
         );
       }
 
-      const textPreview = full ? { content: block.content, isTruncated: false } : getPreview(block.content);
+      const textPreview = full
+        ? { content: block.content, isTruncated: false }
+        : getPreview(block.content);
 
       return (
         <div key={`text-${index}`} className="space-y-3">
@@ -505,7 +529,7 @@ function NoteCard({
           className="size-11 rounded-xl text-slate-500 hover:text-red-500 sm:size-7 sm:text-slate-400"
           aria-label="Excluir anotação"
           title="Excluir anotação"
-          onClick={handleDelete}
+          onClick={() => setConfirmDeleteOpen(true)}
           disabled={deleting}
         >
           <Trash2 className="size-3.5" />
@@ -518,31 +542,41 @@ function NoteCard({
           <Input
             value={draftTitle}
             onChange={(event) => setDraftTitle(event.target.value)}
+            disabled={saving}
             maxLength={160}
             placeholder="Título da anotação"
-            className="h-11 rounded-xl border-violet-300 bg-white text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:bg-white/10 dark:border-white/20"
+            className="h-11 rounded-xl border-violet-300 bg-white text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:bg-white/10 dark:border-white/20 disabled:opacity-60"
           />
           <Textarea
             ref={textareaRef}
             value={draft}
+            disabled={saving}
             onChange={handleEditDraftChange}
             onKeyDown={handleKeyDown}
-            className="min-h-24 resize-none rounded-xl border-violet-300 bg-white text-base focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:bg-white/10 dark:border-white/20"
+            className="min-h-24 resize-none rounded-xl border-violet-300 bg-white text-base focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:bg-white/10 dark:border-white/20 disabled:opacity-60"
             rows={3}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              className="h-11 flex-1 rounded-full bg-violet-600 px-4 text-sm text-white hover:bg-violet-700 sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
+              className="h-11 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm text-white hover:bg-violet-700 sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
               onClick={handleSave}
               disabled={saving || !draftTitle.trim() || !draft.trim()}
             >
-              {saving ? "Salvando…" : "Salvar"}
+              {saving ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" />
+                  Salvando…
+                </>
+              ) : (
+                "Salvar"
+              )}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               className="h-11 flex-1 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
+              disabled={saving}
               onClick={() => {
                 setEditing(false);
                 setDraftTitle(note.title);
@@ -566,7 +600,9 @@ function NoteCard({
               <Clock className="size-3" />
               <span>Criada em {formatDateTime(note.created_at)}</span>
               {hasBeenUpdated(note) && (
-                <span title={`Atualizada em ${formatDateTime(note.updated_at)}`}>
+                <span
+                  title={`Atualizada em ${formatDateTime(note.updated_at)}`}
+                >
                   · Atualizada em {formatDateTime(note.updated_at)}
                 </span>
               )}
@@ -630,6 +666,16 @@ function NoteCard({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Excluir anotação"
+        description={`Tem certeza que deseja excluir "${note.title}"? Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        onConfirm={handleDelete}
+        loading={deleting}
+      />
     </div>
   );
 }
@@ -650,6 +696,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
+  const toast = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /* auto-grow compose textarea */
@@ -681,7 +728,8 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       const q = search.trim().toLowerCase();
       result = result.filter(
         (n) =>
-          n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+          n.title.toLowerCase().includes(q) ||
+          n.content.toLowerCase().includes(q),
       );
     }
     result = result.filter((note) =>
@@ -708,35 +756,58 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       setNotes((prev) => [data.note as Note, ...prev]);
       setTitleDraft("");
       setDraft("");
+      toast.success("Anotação criada!");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar anotação.");
+      const msg = e instanceof Error ? e.message : "Erro ao salvar anotação.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleUpdate = useCallback(async (id: string, title: string, content: string) => {
-    const res = await fetch(`/api/notes/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content }),
-    });
-    const data = (await res.json()) as { note?: Note; error?: string };
-    if (!res.ok || !data.note)
-      throw new Error(data.error ?? "Erro ao atualizar.");
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? (data.note as Note) : n)),
-    );
-  }, []);
+  const handleUpdate = useCallback(
+    async (id: string, title: string, content: string) => {
+      try {
+        const res = await fetch(`/api/notes/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content }),
+        });
+        const data = (await res.json()) as { note?: Note; error?: string };
+        if (!res.ok || !data.note)
+          throw new Error(data.error ?? "Erro ao atualizar.");
+        setNotes((prev) =>
+          prev.map((n) => (n.id === id ? (data.note as Note) : n)),
+        );
+        toast.success("Anotação atualizada!");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao atualizar.";
+        toast.error(msg);
+        throw e;
+      }
+    },
+    [toast],
+  );
 
-  const handleDelete = useCallback(async (id: string) => {
-    const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      throw new Error(data.error ?? "Erro ao excluir.");
-    }
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          throw new Error(data.error ?? "Erro ao excluir.");
+        }
+        setNotes((prev) => prev.filter((n) => n.id !== id));
+        toast.success("Anotação excluída!");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao excluir.";
+        toast.error(msg);
+        throw e;
+      }
+    },
+    [toast],
+  );
 
   const handleTagClick = useCallback((tag: string) => {
     setActiveTag((prev) => (prev === tag ? null : tag));
@@ -782,17 +853,19 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         <Input
           value={titleDraft}
           onChange={(event) => setTitleDraft(event.target.value)}
+          disabled={submitting}
           maxLength={160}
           placeholder="Título da anotação"
-          className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10"
+          className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
         />
         <Textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={handleDraftChange}
+          ref={textareaRef}
+          value={draft}
+          disabled={submitting}
+          onChange={handleDraftChange}
           onKeyDown={handleKeyDown}
           placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
-          className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10"
+          className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
           rows={3}
         />
         <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
@@ -806,7 +879,11 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             onClick={handleCreate}
             disabled={submitting || !titleDraft.trim() || !draft.trim()}
           >
-            <Plus className="size-3.5" />
+            {submitting ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
+            )}
             {submitting ? "Salvando…" : "Salvar anotação"}
           </Button>
           {(titleDraft.trim() || draft.trim()) && (
@@ -818,7 +895,8 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             <Button
               size="sm"
               variant="ghost"
-              className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:px-3 sm:text-xs"
+              className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
+              disabled={submitting}
               onClick={() => {
                 setTitleDraft("");
                 setDraft("");
