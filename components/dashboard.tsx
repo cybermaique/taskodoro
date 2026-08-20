@@ -230,12 +230,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     }
   };
 
-  const toggleTask = async (task: Task) => {
-    await updateTaskWithBusy(task.id, {
-      status: task.status === "completed" ? "not_started" : "completed",
-    });
-  };
-
   const deleteTask = async (taskId: string) => {
     setBusyTaskId(taskId);
     setErrorMessage(null);
@@ -413,7 +407,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
   return (
     <main className="min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
-      <div className="dashboard-safe-insets mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4 sm:gap-6">
+      <div className="dashboard-safe-insets flex w-full min-w-0 flex-col gap-4 sm:gap-6">
         <header
           className={[
             "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
@@ -551,7 +545,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                   isCompact={isCompact}
                   categorySuggestions={categorySuggestions}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
-                  onToggleTask={toggleTask}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
                   onAddAttachment={addTaskAttachment}
