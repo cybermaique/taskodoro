@@ -3,6 +3,7 @@ import { Manrope, Space_Grotesk } from "next/font/google";
 import type { Viewport } from "next";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -46,7 +47,9 @@ export default function RootLayout({
         className="min-h-svh min-w-0 overflow-x-clip bg-background text-foreground"
         suppressHydrationWarning
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
