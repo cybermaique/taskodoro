@@ -8,15 +8,11 @@ import {
   useState,
 } from "react";
 import {
-  CalendarCheck,
-  CalendarDays,
   ClipboardPaste,
   Flag,
   Folder,
   Paperclip,
   Plus,
-  Repeat,
-  Timer,
   X,
   Loader2,
 } from "lucide-react";
@@ -30,17 +26,13 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { TaskPriority, TaskRecurrence } from "@/types/task";
+import type { TaskPriority } from "@/types/task";
 
 interface TaskFormValues {
   title: string;
   description: string;
   priority: TaskPriority;
   category: string;
-  due_date: string;
-  planned_for: string;
-  estimated_minutes: string;
-  recurrence: TaskRecurrence;
 }
 
 interface TaskFormProps {
@@ -53,10 +45,6 @@ interface TaskFormProps {
     description?: string;
     priority?: TaskPriority;
     category?: string | null;
-    due_date?: string | null;
-    planned_for?: string | null;
-    estimated_minutes?: number | null;
-    recurrence?: TaskRecurrence;
     attachments?: File[];
   }) => Promise<void>;
 }
@@ -66,29 +54,12 @@ const EMPTY_VALUES: TaskFormValues = {
   description: "",
   priority: "medium",
   category: "trabalho",
-  due_date: "",
-  planned_for: "",
-  estimated_minutes: "",
-  recurrence: "none",
 };
 
 const compactFieldClass =
   "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white pl-10 pr-3 text-base shadow-none sm:text-sm dark:border-white/10 dark:bg-black/20";
 const compactSelectClass =
   "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white py-0 pl-10 pr-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20";
-
-function readMinutes(value: string) {
-  if (!value.trim()) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return Math.floor(parsed);
-}
 
 function getPriorityLabel(priority: TaskPriority) {
   if (priority === "high") {
@@ -100,22 +71,6 @@ function getPriorityLabel(priority: TaskPriority) {
   }
 
   return "Média";
-}
-
-function getRecurrenceLabel(recurrence: TaskRecurrence) {
-  if (recurrence === "daily") {
-    return "Diária";
-  }
-
-  if (recurrence === "weekly") {
-    return "Semanal";
-  }
-
-  if (recurrence === "monthly") {
-    return "Mensal";
-  }
-
-  return "Sem recorrência";
 }
 
 export function TaskForm({
@@ -135,10 +90,6 @@ export function TaskForm({
     values.description !== EMPTY_VALUES.description ||
     values.priority !== EMPTY_VALUES.priority ||
     values.category !== EMPTY_VALUES.category ||
-    values.due_date !== EMPTY_VALUES.due_date ||
-    values.planned_for !== EMPTY_VALUES.planned_for ||
-    values.estimated_minutes !== EMPTY_VALUES.estimated_minutes ||
-    values.recurrence !== EMPTY_VALUES.recurrence ||
     attachments.length > 0;
 
   useEffect(() => {
@@ -181,10 +132,6 @@ export function TaskForm({
         description: values.description.trim() || undefined,
         priority: values.priority,
         category: values.category.trim() || null,
-        due_date: values.due_date || null,
-        planned_for: values.planned_for || null,
-        estimated_minutes: readMinutes(values.estimated_minutes),
-        recurrence: values.recurrence,
         attachments: attachments.length ? attachments : undefined,
       });
 
@@ -393,95 +340,11 @@ export function TaskForm({
             />
           </label>
 
-          <label className="relative min-w-0">
-            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={`${compactFieldClass} disabled:opacity-60`}
-              type="date"
-              disabled={isSubmitting}
-              value={values.due_date}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  due_date: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          {!isCompact ? (
-            <label className="relative min-w-0">
-              <CalendarCheck className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                className={`${compactFieldClass} disabled:opacity-60`}
-                type="date"
-                disabled={isSubmitting}
-                value={values.planned_for}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    planned_for: event.target.value,
-                  }))
-                }
-                title="Fazer em"
-              />
-            </label>
-          ) : null}
-
           <datalist id="category-suggestions">
             {categorySuggestions.map((category) => (
               <option key={category} value={category} />
             ))}
           </datalist>
-
-          {!isCompact ? (
-            <label className="relative min-w-0">
-              <Timer className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                className={`${compactFieldClass} disabled:opacity-60`}
-                type="number"
-                disabled={isSubmitting}
-                min={1}
-                max={180}
-                placeholder="Estimativa"
-                value={values.estimated_minutes}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    estimated_minutes: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          ) : null}
-
-          {!isCompact ? (
-            <label className="relative min-w-0">
-              <Repeat className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Select
-                value={values.recurrence}
-                disabled={isSubmitting}
-                onValueChange={(value) =>
-                  setValues((current) => ({
-                    ...current,
-                    recurrence: (value ?? "none") as TaskRecurrence,
-                  }))
-                }
-              >
-                <SelectTrigger className={compactSelectClass}>
-                  <span className="flex h-full items-center text-sm">
-                    {getRecurrenceLabel(values.recurrence)}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem recorrência</SelectItem>
-                  <SelectItem value="daily">Diária</SelectItem>
-                  <SelectItem value="weekly">Semanal</SelectItem>
-                  <SelectItem value="monthly">Mensal</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-          ) : null}
         </div>
 
         {errorMessage ? (

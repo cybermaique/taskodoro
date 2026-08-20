@@ -8,7 +8,6 @@ import type {
   Task,
   TaskAttachment,
   TaskPriority,
-  TaskRecurrence,
   TaskStatus,
   UpdateSubtaskInput,
   UpdateTaskInput,
@@ -21,11 +20,6 @@ const TASK_COLUMNS = `
   status,
   priority,
   category,
-  due_date,
-  planned_for,
-  estimated_minutes,
-  recurrence,
-  recurring_parent_id,
   created_at,
   completed_at,
   updated_at,
@@ -48,14 +42,6 @@ const TASK_COLUMNS = `
 `;
 
 const SUBTASK_COLUMNS = "id,task_id,title,is_completed,created_at,updated_at";
-
-function normalizeNullableMinutes(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return Math.max(1, Math.floor(value));
-}
 
 function normalizeNullableText(value: string | null | undefined) {
   if (value === null || value === undefined) {
@@ -87,60 +73,11 @@ function normalizeStatus(value: string | undefined): TaskStatus {
   return "pending";
 }
 
-function normalizeRecurrence(value: string | undefined): TaskRecurrence {
-  if (value === "daily" || value === "weekly" || value === "monthly") {
-    return value;
-  }
-
-  return "none";
-}
-
-function normalizeDate(value: string | null | undefined, fieldLabel: string) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
-  if (!isDate) {
-    throw new Error(`${fieldLabel} invalida. Use o formato YYYY-MM-DD.`);
-  }
-
-  return trimmed;
-}
-
-function addRecurrenceDate(value: string | null, recurrence: TaskRecurrence) {
-  if (!value || recurrence === "none") {
-    return value;
-  }
-
-  const date = new Date(`${value}T00:00:00`);
-
-  if (recurrence === "daily") {
-    date.setDate(date.getDate() + 1);
-  }
-
-  if (recurrence === "weekly") {
-    date.setDate(date.getDate() + 7);
-  }
-
-  if (recurrence === "monthly") {
-    date.setMonth(date.getMonth() + 1);
-  }
-
-  return date.toISOString().slice(0, 10);
-}
-
 function mapTask(task: Task): Task {
   const rawTask = task as Task & { task_attachments?: TaskAttachment[] };
 
   return {
     ...task,
-    recurrence: task.recurrence ?? "none",
     attachments: Array.isArray(rawTask.task_attachments)
       ? rawTask.task_attachments
       : [],
@@ -266,10 +203,6 @@ export async function createTask(input: CreateTaskInput) {
     status: "pending" as const,
     priority: normalizePriority(input.priority),
     category: normalizeNullableText(input.category),
-    due_date: normalizeDate(input.due_date, "Data limite"),
-    planned_for: normalizeDate(input.planned_for, "Data planejada"),
-    estimated_minutes: normalizeNullableMinutes(input.estimated_minutes),
-    recurrence: normalizeRecurrence(input.recurrence),
     completed_at: null,
   };
 
@@ -288,7 +221,6 @@ export async function createTask(input: CreateTaskInput) {
 
 export async function updateTask(id: string, input: UpdateTaskInput) {
   const supabase = await createSupabaseServerClient();
-  const previousTask = input.status === "completed" ? await getTaskById(id) : null;
   const updatePayload: Record<string, string | number | null> = {};
 
   if (typeof input.title === "string") {
@@ -313,22 +245,6 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
     updatePayload.category = normalizeNullableText(input.category);
   }
 
-  if (input.due_date !== undefined) {
-    updatePayload.due_date = normalizeDate(input.due_date, "Data limite");
-  }
-
-  if (input.planned_for !== undefined) {
-    updatePayload.planned_for = normalizeDate(input.planned_for, "Data planejada");
-  }
-
-  if (input.estimated_minutes !== undefined) {
-    updatePayload.estimated_minutes = normalizeNullableMinutes(input.estimated_minutes);
-  }
-
-  if (input.recurrence !== undefined) {
-    updatePayload.recurrence = normalizeRecurrence(input.recurrence);
-  }
-
   if (!Object.keys(updatePayload).length) {
     return getTaskById(id);
   }
@@ -339,44 +255,7 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
     throw new Error(error.message);
   }
 
-  const updatedTask = await getTaskById(id);
-
-  if (
-    previousTask &&
-    previousTask.status !== "completed" &&
-    updatedTask.status === "completed" &&
-    updatedTask.recurrence !== "none"
-  ) {
-    await createNextRecurringTask(updatedTask);
-  }
-
-  return updatedTask;
-}
-
-async function createNextRecurringTask(task: Task) {
-  const supabase = await createSupabaseServerClient();
-  const recurrence = task.recurrence;
-
-  if (recurrence === "none") {
-    return;
-  }
-
-  const { error } = await supabase.from("tasks").insert({
-    title: task.title,
-    description: task.description,
-    status: "pending",
-    priority: task.priority,
-    category: task.category,
-    due_date: addRecurrenceDate(task.due_date, recurrence),
-    planned_for: addRecurrenceDate(task.planned_for, recurrence),
-    estimated_minutes: task.estimated_minutes,
-    recurrence,
-    recurring_parent_id: task.recurring_parent_id ?? task.id,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  return getTaskById(id);
 }
 
 export async function deleteTask(id: string) {

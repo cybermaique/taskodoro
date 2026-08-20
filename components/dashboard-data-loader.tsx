@@ -14,11 +14,6 @@ const TASK_COLUMNS = `
   status,
   priority,
   category,
-  due_date,
-  planned_for,
-  estimated_minutes,
-  recurrence,
-  recurring_parent_id,
   created_at,
   completed_at,
   updated_at,
@@ -45,7 +40,6 @@ type RawTask = Task & { task_attachments?: TaskAttachment[] };
 function mapTask(task: RawTask): Task {
   return {
     ...task,
-    recurrence: task.recurrence ?? "none",
     attachments: Array.isArray(task.task_attachments)
       ? task.task_attachments
       : [],
