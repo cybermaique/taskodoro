@@ -1,11 +1,34 @@
 ﻿"use client";
 
-import { type ClipboardEvent, type DragEvent, type FormEvent, useEffect, useState } from "react";
-import { CalendarCheck, CalendarDays, ClipboardPaste, Flag, Folder, Paperclip, Plus, Repeat, Timer, X } from "lucide-react";
+import {
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  useEffect,
+  useState,
+} from "react";
+import {
+  CalendarCheck,
+  CalendarDays,
+  ClipboardPaste,
+  Flag,
+  Folder,
+  Paperclip,
+  Plus,
+  Repeat,
+  Timer,
+  X,
+  Loader2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { TaskPriority, TaskRecurrence } from "@/types/task";
 
@@ -169,7 +192,9 @@ export function TaskForm({
       setAttachments([]);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Não foi possível criar a tarefa.",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar a tarefa.",
       );
     }
   };
@@ -187,7 +212,12 @@ export function TaskForm({
           if (event.currentTarget === event.target) setIsDraggingFiles(false);
         }}
         onDrop={handleDrop}
-        className={["min-w-0 space-y-3 rounded-2xl transition sm:space-y-4", isDraggingFiles ? "bg-teal-500/5 ring-2 ring-teal-400/70 ring-inset" : ""].join(" ")}
+        className={[
+          "min-w-0 space-y-3 rounded-2xl transition sm:space-y-4",
+          isDraggingFiles
+            ? "bg-teal-500/5 ring-2 ring-teal-400/70 ring-inset"
+            : "",
+        ].join(" ")}
       >
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -203,8 +233,12 @@ export function TaskForm({
             disabled={isSubmitting}
             className="h-11 w-full touch-manipulation rounded-full px-4 sm:h-9 sm:w-auto"
           >
-            <Plus className="size-4" />
-            {isSubmitting ? "Salvando" : "Adicionar"}
+            {isSubmitting ? (
+              <Loader2 className="size-4 animate-spin text-white" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            {isSubmitting ? "Salvando…" : "Adicionar"}
           </Button>
         </div>
 
@@ -212,19 +246,63 @@ export function TaskForm({
           {attachments.length ? (
             <>
               {attachments.map((attachment, index) => (
-                <span key={`${attachment.name}-${attachment.lastModified}-${index}`} className="flex items-center rounded-full border border-teal-500/30 bg-teal-500/10 pl-3 text-teal-700 dark:text-teal-200">
+                <span
+                  key={`${attachment.name}-${attachment.lastModified}-${index}`}
+                  className="flex items-center rounded-full border border-teal-500/30 bg-teal-500/10 pl-3 text-teal-700 dark:text-teal-200"
+                >
                   Arquivo: {attachment.name || "arquivo"}
-                  <Button type="button" size="sm" variant="ghost" className="h-8 rounded-full px-2" onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remover ${attachment.name || "arquivo"}`}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 rounded-full px-2"
+                    disabled={isSubmitting}
+                    onClick={() =>
+                      setAttachments((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    aria-label={`Remover ${attachment.name || "arquivo"}`}
+                  >
                     <X className="size-4" />
                   </Button>
                 </span>
               ))}
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 hover:bg-slate-900/5 dark:border-white/10 dark:hover:bg-white/10"><Paperclip className="size-3.5" /> Adicionar<input type="file" multiple className="sr-only" onChange={(event) => addAttachments(Array.from(event.target.files ?? []))} /></label>
+              <label
+                className={`flex items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 dark:border-white/10 ${isSubmitting ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-slate-900/5 dark:hover:bg-white/10"}`}
+              >
+                <Paperclip className="size-3.5" /> Adicionar
+                <input
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  disabled={isSubmitting}
+                  onChange={(event) =>
+                    addAttachments(Array.from(event.target.files ?? []))
+                  }
+                />
+              </label>
             </>
           ) : (
             <>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 hover:bg-slate-900/5 dark:border-white/10 dark:hover:bg-white/10"><Paperclip className="size-3.5" /> Anexar arquivo<input type="file" multiple className="sr-only" onChange={(event) => addAttachments(Array.from(event.target.files ?? []))} /></label>
-              <span className="flex items-center gap-1.5"><ClipboardPaste className="size-3.5" /> Cole um arquivo ou print com Ctrl+V.</span>
+              <label
+                className={`flex items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 dark:border-white/10 ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-slate-900/5 dark:hover:bg-white/10"}`}
+              >
+                <Paperclip className="size-3.5" /> Anexar arquivo
+                <input
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  disabled={isSubmitting}
+                  onChange={(event) =>
+                    addAttachments(Array.from(event.target.files ?? []))
+                  }
+                />
+              </label>
+              <span className="flex items-center gap-1.5">
+                <ClipboardPaste className="size-3.5" /> Cole um arquivo ou print
+                com Ctrl+V.
+              </span>
             </>
           )}
         </div>
@@ -236,11 +314,15 @@ export function TaskForm({
 
         <div className="grid gap-3">
           <Input
-            className="h-12 min-w-0 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] text-base shadow-none dark:border-white/10 dark:bg-black/20"
+            className="h-12 min-w-0 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] text-base shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
             placeholder="Ex.: Escrever proposta comercial"
             value={values.title}
+            disabled={isSubmitting}
             onChange={(event) =>
-              setValues((current) => ({ ...current, title: event.target.value }))
+              setValues((current) => ({
+                ...current,
+                title: event.target.value,
+              }))
             }
             maxLength={120}
             required
@@ -248,11 +330,15 @@ export function TaskForm({
 
           {!isCompact ? (
             <Textarea
-              className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20"
+              className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
               placeholder="Descrição opcional"
               value={values.description}
+              disabled={isSubmitting}
               onChange={(event) =>
-                setValues((current) => ({ ...current, description: event.target.value }))
+                setValues((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
               }
               rows={3}
             />
@@ -269,6 +355,7 @@ export function TaskForm({
             <Flag className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Select
               value={values.priority}
+              disabled={isSubmitting}
               onValueChange={(value) =>
                 setValues((current) => ({
                   ...current,
@@ -292,12 +379,16 @@ export function TaskForm({
           <label className="relative min-w-0">
             <Folder className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
-              className={compactFieldClass}
+              className={`${compactFieldClass} disabled:opacity-60`}
               list="category-suggestions"
+              disabled={isSubmitting}
               placeholder="Categoria"
               value={values.category}
               onChange={(event) =>
-                setValues((current) => ({ ...current, category: event.target.value }))
+                setValues((current) => ({
+                  ...current,
+                  category: event.target.value,
+                }))
               }
             />
           </label>
@@ -305,28 +396,36 @@ export function TaskForm({
           <label className="relative min-w-0">
             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
-              className={compactFieldClass}
+              className={`${compactFieldClass} disabled:opacity-60`}
               type="date"
+              disabled={isSubmitting}
               value={values.due_date}
               onChange={(event) =>
-                setValues((current) => ({ ...current, due_date: event.target.value }))
+                setValues((current) => ({
+                  ...current,
+                  due_date: event.target.value,
+                }))
               }
             />
           </label>
 
           {!isCompact ? (
             <label className="relative min-w-0">
-            <CalendarCheck className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={compactFieldClass}
-              type="date"
-              value={values.planned_for}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, planned_for: event.target.value }))
-              }
-              title="Fazer em"
-            />
-          </label>
+              <CalendarCheck className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className={`${compactFieldClass} disabled:opacity-60`}
+                type="date"
+                disabled={isSubmitting}
+                value={values.planned_for}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    planned_for: event.target.value,
+                  }))
+                }
+                title="Fazer em"
+              />
+            </label>
           ) : null}
 
           <datalist id="category-suggestions">
@@ -337,57 +436,56 @@ export function TaskForm({
 
           {!isCompact ? (
             <label className="relative min-w-0">
-            <Timer className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={compactFieldClass}
-              type="number"
-              min={1}
-              max={180}
-              placeholder="Estimativa"
-              value={values.estimated_minutes}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  estimated_minutes: event.target.value,
-                }))
-              }
-            />
-          </label>
+              <Timer className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className={`${compactFieldClass} disabled:opacity-60`}
+                type="number"
+                disabled={isSubmitting}
+                min={1}
+                max={180}
+                placeholder="Estimativa"
+                value={values.estimated_minutes}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    estimated_minutes: event.target.value,
+                  }))
+                }
+              />
+            </label>
           ) : null}
 
           {!isCompact ? (
             <label className="relative min-w-0">
-            <Repeat className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Select
-              value={values.recurrence}
-              onValueChange={(value) =>
-                setValues((current) => ({
-                  ...current,
-                  recurrence: (value ?? "none") as TaskRecurrence,
-                }))
-              }
-            >
-              <SelectTrigger className={compactSelectClass}>
-                <span className="flex h-full items-center text-sm">
-                  {getRecurrenceLabel(values.recurrence)}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem recorrência</SelectItem>
-                <SelectItem value="daily">Diária</SelectItem>
-                <SelectItem value="weekly">Semanal</SelectItem>
-                <SelectItem value="monthly">Mensal</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
+              <Repeat className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Select
+                value={values.recurrence}
+                disabled={isSubmitting}
+                onValueChange={(value) =>
+                  setValues((current) => ({
+                    ...current,
+                    recurrence: (value ?? "none") as TaskRecurrence,
+                  }))
+                }
+              >
+                <SelectTrigger className={compactSelectClass}>
+                  <span className="flex h-full items-center text-sm">
+                    {getRecurrenceLabel(values.recurrence)}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem recorrência</SelectItem>
+                  <SelectItem value="daily">Diária</SelectItem>
+                  <SelectItem value="weekly">Semanal</SelectItem>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
           ) : null}
-
         </div>
 
         {errorMessage ? (
-          <p className="break-words text-sm text-destructive">
-            {errorMessage}
-          </p>
+          <p className="break-words text-sm text-destructive">{errorMessage}</p>
         ) : null}
       </form>
     </section>
