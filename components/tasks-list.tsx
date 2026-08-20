@@ -12,7 +12,6 @@ import {
 } from "react";
 import {
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -41,11 +40,9 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   Task,
   TaskAttachment,
-  TaskFilter,
   TaskPriority,
   TaskView,
 } from "@/types/task";
@@ -70,9 +67,8 @@ interface TasksListProps {
 }
 
 type PriorityFilter = "all" | TaskPriority;
-type TaskSection = "active" | "completed";
+type TaskSection = Task["status"];
 
-const taskStatusStorageKey = "taskboard_task_status_filter";
 const taskViewStorageKey = "taskboard_task_view_filter";
 const taskPriorityStorageKey = "taskboard_task_priority_filter";
 const taskCategoryStorageKey = "taskboard_task_category_filter";
@@ -113,18 +109,30 @@ function getStatusLabel(status: Task["status"]) {
     return "Em andamento";
   }
 
+  if (status === "waiting") {
+    return "Aguardando";
+  }
+
   if (status === "completed") {
-    return "Concluída";
+    return "Finalizada";
   }
 
-  if (status === "canceled") {
-    return "Cancelada";
-  }
-
-  return "Pendente";
+  return "Não iniciada";
 }
 
-const taskSectionOrder: TaskSection[] = ["active", "completed"];
+const taskSectionOrder: TaskSection[] = [
+  "not_started",
+  "in_progress",
+  "waiting",
+  "completed",
+];
+
+const taskSectionStyles: Record<TaskSection, string> = {
+  not_started: "border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-white/70",
+  in_progress: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-200",
+  waiting: "border-amber-500/40 bg-amber-400/15 text-amber-800 dark:text-amber-200",
+  completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
+};
 
 const taskOrderStorageKey = "taskboard_task_order";
 
@@ -182,7 +190,6 @@ export function TasksList({
   onToggleSubtask,
   onDeleteSubtask,
 }: TasksListProps) {
-  const [statusFilter, setStatusFilter] = useState<TaskFilter>("all");
   const [viewFilter, setViewFilter] = useState<TaskView>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -197,7 +204,7 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
-  const [completedTasksExpanded, setCompletedTasksExpanded] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [attachmentViewer, setAttachmentViewer] = useState<{
     task: Task;
     index: number;
@@ -214,17 +221,6 @@ export function TasksList({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      // Load status filter
-      const storedStatus = window.localStorage.getItem(taskStatusStorageKey);
-      if (
-        storedStatus === "all" ||
-        storedStatus === "pending" ||
-        storedStatus === "in_progress" ||
-        storedStatus === "canceled"
-      ) {
-        setStatusFilter(storedStatus as TaskFilter);
-      }
-
       // Load view filter
       const storedView = window.localStorage.getItem(taskViewStorageKey);
       const isValidTaskView =
@@ -263,11 +259,6 @@ export function TasksList({
 
     return () => window.clearTimeout(timeoutId);
   }, []);
-
-  useEffect(() => {
-    if (!hasLoadedFilters) return;
-    window.localStorage.setItem(taskStatusStorageKey, statusFilter);
-  }, [statusFilter, hasLoadedFilters]);
 
   useEffect(() => {
     if (!hasLoadedFilters) return;
@@ -340,10 +331,6 @@ export function TasksList({
 
   const filteredTasks = useMemo(() => {
     return orderedTasks.filter((task) => {
-      if (statusFilter !== "all" && task.status !== statusFilter) {
-        return false;
-      }
-
       if (viewFilter === "work" && task.category !== "trabalho") {
         return false;
       }
@@ -388,34 +375,25 @@ export function TasksList({
     orderedTasks,
     priorityFilter,
     search,
-    statusFilter,
     viewFilter,
   ]);
 
   const groupedTasks = useMemo(() => {
     const groups: Record<TaskSection, Task[]> = {
-      active: [],
+      not_started: [],
+      in_progress: [],
+      waiting: [],
       completed: [],
     };
 
     for (const task of filteredTasks) {
-      if (task.status === "completed") {
-        groups.completed.push(task);
-      } else {
-        groups.active.push(task);
-      }
+      groups[task.status].push(task);
     }
-
-    groups.completed.sort(
-      (left, right) =>
-        new Date(right.completed_at ?? right.updated_at).getTime() -
-        new Date(left.completed_at ?? left.updated_at).getTime(),
-    );
 
     return groups;
   }, [filteredTasks]);
 
-  const visibleTaskCount = filteredTasks.length - groupedTasks.completed.length;
+  const visibleTaskCount = filteredTasks.length;
 
   const startEdit = (task: Task) => {
     setEditingTaskId(task.id);
@@ -504,7 +482,7 @@ export function TasksList({
     setDragOverTaskId(taskId ?? null);
   };
 
-  const handleDropOnTask = (
+  const handleDropOnTask = async (
     event: DragEvent<HTMLLIElement>,
     targetTaskId: string,
   ) => {
@@ -513,18 +491,30 @@ export function TasksList({
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
 
     if (taskId) {
+      const taskToMove = tasks.find((task) => task.id === taskId);
+      const targetTask = tasks.find((task) => task.id === targetTaskId);
+      if (taskToMove && targetTask && taskToMove.status !== targetTask.status) {
+        await onUpdateTask(taskId, { status: targetTask.status });
+      }
       moveTaskBefore(taskId, targetTaskId);
     }
 
     handleDragEnd();
   };
 
-  const handleDropOnList = (event: DragEvent<HTMLUListElement>) => {
+  const handleDropOnColumn = async (
+    event: DragEvent<HTMLUListElement>,
+    status: TaskSection,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
 
     if (taskId) {
+      const taskToMove = tasks.find((task) => task.id === taskId);
+      if (taskToMove && taskToMove.status !== status) {
+        await onUpdateTask(taskId, { status });
+      }
       moveTaskToEnd(taskId);
     }
 
@@ -538,47 +528,9 @@ export function TasksList({
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">Tarefas</h2>
             <p className="text-sm text-slate-500 dark:text-white/45">
-              {visibleTaskCount} visíveis
-              {groupedTasks.completed.length > 0
-                ? ` · ${groupedTasks.completed.length} concluídas ocultas`
-                : ""}
+              {visibleTaskCount} no quadro
             </p>
           </div>
-
-          {!isCompact ? (
-            <Tabs
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value as TaskFilter)}
-              className="w-full min-w-0 touch-pan-x overflow-x-auto pb-1 [scrollbar-width:none] md:w-auto md:pb-0 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-            >
-              <TabsList className="grid w-[30rem] min-w-[30rem] grid-cols-4 rounded-full bg-slate-950/[0.06] p-1 group-data-horizontal/tabs:h-12 md:group-data-horizontal/tabs:h-8 dark:bg-white/10">
-                <TabsTrigger
-                  value="all"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Todas
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pending"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Pendentes
-                </TabsTrigger>
-                <TabsTrigger
-                  value="in_progress"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Andamento
-                </TabsTrigger>
-                <TabsTrigger
-                  value="canceled"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Canceladas
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          ) : null}
         </div>
 
         <div className="mt-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -675,80 +627,42 @@ export function TasksList({
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid min-w-max grid-cols-4 items-start gap-4 pb-3 xl:min-w-0">
           {taskSectionOrder.map((section) => {
             const tasksByBucket = groupedTasks[section];
-            const isCompletedSection = section === "completed";
-
-            if (!tasksByBucket.length) {
-              return null;
-            }
 
             return (
-              <section key={section} className="min-w-0 space-y-3">
-                {isCompletedSection ? (
-                  <button
-                    type="button"
-                    className="flex min-h-16 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
-                    aria-expanded={completedTasksExpanded}
-                    aria-controls="completed-tasks-list"
-                    onClick={() =>
-                      setCompletedTasksExpanded((expanded) => !expanded)
-                    }
+              <section
+                key={section}
+                className="flex w-80 min-w-80 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] xl:w-auto xl:min-w-0"
+              >
+                <div className="mb-3 flex items-center gap-2 px-1">
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${taskSectionStyles[section]}`}
                   >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                      <CheckCircle2 className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">Concluídas</span>
-                      <span className="block text-xs text-slate-500 dark:text-white/45">
-                        {tasksByBucket.length}{" "}
-                        {tasksByBucket.length === 1
-                          ? "tarefa oculta"
-                          : "tarefas ocultas"}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={[
-                        "size-5 shrink-0 text-slate-500 transition-transform duration-200 dark:text-white/50",
-                        completedTasksExpanded ? "rotate-180" : "",
-                      ].join(" ")}
-                    />
-                  </button>
-                ) : (
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="h-7 rounded-full border border-teal-500 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-700 dark:text-teal-200"
-                    >
-                      Tarefas ativas
-                    </span>
-                    <div className="h-px flex-1 bg-slate-900/10 dark:bg-white/10" />
-                    <span className="text-xs text-slate-500 dark:text-white/45">
-                      {tasksByBucket.length}
-                    </span>
-                  </div>
-                )}
+                    {getStatusLabel(section)}
+                  </span>
+                  <span className="ml-auto text-xs text-slate-500 dark:text-white/45">
+                    {tasksByBucket.length}
+                  </span>
+                </div>
 
-                {!isCompletedSection || completedTasksExpanded ? (
-                  <ul
-                    id={isCompletedSection ? "completed-tasks-list" : undefined}
-                    className="min-w-0 space-y-3"
-                    onDragOver={
-                      isCompletedSection
-                        ? undefined
-                        : (event) => handleDragOver(event)
-                    }
-                    onDrop={
-                      isCompletedSection
-                        ? undefined
-                        : handleDropOnList
-                    }
-                  >
+                <ul
+                  className="min-h-24 space-y-3"
+                  onDragOver={(event) => handleDragOver(event)}
+                  onDrop={(event) => handleDropOnColumn(event, section)}
+                >
+                  {tasksByBucket.length === 0 ? (
+                    <li className="rounded-2xl border border-dashed border-slate-900/15 px-3 py-5 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40">
+                      Arraste uma tarefa para cá
+                    </li>
+                  ) : null}
                     {tasksByBucket.map((task) => {
                       const isCompleted = task.status === "completed";
                       const isBusy = busyTaskId === task.id;
                       const isEditing =
                         editingTaskId === task.id && editingState;
+                      const isExpanded = expandedTaskId === task.id;
 
                       const completedSubtasks = task.subtasks.filter(
                         (item) => item.is_completed,
@@ -761,7 +675,6 @@ export function TasksList({
                         : 0;
                       const shouldSuggestComplete =
                         task.status !== "completed" &&
-                        task.status !== "canceled" &&
                         hasSubtasks &&
                         completedSubtasks === task.subtasks.length;
 
@@ -864,8 +777,16 @@ export function TasksList({
                                 <>
                                   <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                      <p
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedTaskId((current) =>
+                                            current === task.id ? null : task.id,
+                                          )
+                                        }
+                                        aria-expanded={isExpanded}
                                         className={[
+                                          "w-full text-left",
                                           isCompact
                                             ? "break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]"
                                             : "break-words text-lg font-semibold leading-snug [overflow-wrap:anywhere]",
@@ -875,13 +796,13 @@ export function TasksList({
                                         ].join(" ")}
                                       >
                                         {task.title}
-                                      </p>
-                                      {!isCompact && task.description ? (
+                                      </button>
+                                      {isExpanded && task.description ? (
                                         <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere] dark:text-white/45">
                                           {task.description}
                                         </p>
                                       ) : null}
-                                      {task.attachments.length ? (
+                                      {isExpanded && task.attachments.length ? (
                                         <div className="mt-3 flex flex-wrap gap-2">
                                           {sortAttachments(
                                             task.attachments,
@@ -952,7 +873,7 @@ export function TasksList({
                                 </>
                               )}
 
-                              {isCompact && hasSubtasks ? (
+                              {!isExpanded && hasSubtasks ? (
                                 <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
                                   <span>
                                     Subtarefas {completedSubtasks}/
@@ -983,7 +904,7 @@ export function TasksList({
                               <div
                                 className={[
                                   "space-y-3 rounded-2xl bg-slate-950/[0.035] p-3 dark:bg-white/[0.045]",
-                                  isCompact ? "hidden" : "",
+                                  isExpanded ? "" : "hidden",
                                 ].join(" ")}
                               >
                                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -1148,57 +1069,39 @@ export function TasksList({
                               >
                                 <Trash2 className="size-4 text-rose-500" />
                               </Button>
-                              {!isCompact &&
-                              task.status !== "completed" &&
-                              task.status !== "canceled" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, {
-                                      status: "in_progress",
-                                    })
-                                  }
-                                >
-                                  Andamento
-                                </Button>
-                              ) : null}
-                              {!isCompact && task.status === "canceled" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, { status: "pending" })
-                                  }
-                                >
-                                  Reabrir
-                                </Button>
-                              ) : !isCompact && task.status !== "completed" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, {
-                                      status: "canceled",
-                                    })
-                                  }
-                                >
-                                  Cancelar
-                                </Button>
-                              ) : null}
+                              <Select
+                                value={task.status}
+                                disabled={isBusy}
+                                onValueChange={(value) =>
+                                  onUpdateTask(task.id, {
+                                    status: value ?? "not_started",
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-11 w-full rounded-full border-slate-900/10 bg-white px-3 text-xs shadow-none md:h-8 dark:border-white/10 dark:bg-black/20">
+                                  <span>{getStatusLabel(task.status)}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="not_started">
+                                    Não iniciada
+                                  </SelectItem>
+                                  <SelectItem value="in_progress">
+                                    Em andamento
+                                  </SelectItem>
+                                  <SelectItem value="waiting">
+                                    Aguardando
+                                  </SelectItem>
+                                  <SelectItem value="completed">
+                                    Finalizada
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
                         </li>
                       );
                     })}
                   </ul>
-                ) : null}
               </section>
             );
           })}

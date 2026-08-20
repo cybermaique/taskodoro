@@ -117,13 +117,15 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   }, [selectedTab]);
 
   const dashboardStats = useMemo(() => {
-    const pending = tasks.filter((task) => task.status === "pending").length;
+    const notStarted = tasks.filter(
+      (task) => task.status === "not_started",
+    ).length;
     const completed = tasks.filter(
       (task) => task.status === "completed",
     ).length;
 
     return {
-      pending,
+      notStarted,
       completed,
     };
   }, [tasks]);
@@ -230,7 +232,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
   const toggleTask = async (task: Task) => {
     await updateTaskWithBusy(task.id, {
-      status: task.status === "completed" ? "pending" : "completed",
+      status: task.status === "completed" ? "not_started" : "completed",
     });
   };
 
@@ -453,8 +455,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               <>
                 <StatPill
                   icon={CircleDot}
-                  label="Pendentes"
-                  value={dashboardStats.pending}
+                  label="Não iniciadas"
+                  value={dashboardStats.notStarted}
                 />
                 <StatPill
                   icon={CheckCircle2}
