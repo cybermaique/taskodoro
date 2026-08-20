@@ -11,8 +11,6 @@ import {
   useState,
 } from "react";
 import {
-  CalendarClock,
-  CalendarCheck,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -21,7 +19,6 @@ import {
   CirclePlus,
   GripVertical,
   Pencil,
-  Repeat,
   Search,
   Trash2,
   X,
@@ -45,13 +42,11 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate, formatDateTime } from "@/lib/format";
 import type {
   Task,
   TaskAttachment,
   TaskFilter,
   TaskPriority,
-  TaskRecurrence,
   TaskView,
 } from "@/types/task";
 
@@ -75,8 +70,7 @@ interface TasksListProps {
 }
 
 type PriorityFilter = "all" | TaskPriority;
-type DueBucket = "overdue" | "today" | "week" | "later" | "none";
-type TaskSection = DueBucket | "completed";
+type TaskSection = "active" | "completed";
 
 const taskStatusStorageKey = "taskboard_task_status_filter";
 const taskViewStorageKey = "taskboard_task_view_filter";
@@ -87,11 +81,7 @@ interface EditingState {
   title: string;
   description: string;
   category: string;
-  due_date: string;
-  planned_for: string;
-  estimated_minutes: string;
   priority: TaskPriority;
-  recurrence: TaskRecurrence;
 }
 
 function getPriorityLabel(priority: TaskPriority) {
@@ -134,80 +124,7 @@ function getStatusLabel(status: Task["status"]) {
   return "Pendente";
 }
 
-function getRecurrenceLabel(recurrence: TaskRecurrence) {
-  if (recurrence === "daily") {
-    return "Diária";
-  }
-
-  if (recurrence === "weekly") {
-    return "Semanal";
-  }
-
-  if (recurrence === "monthly") {
-    return "Mensal";
-  }
-
-  return "Sem recorrência";
-}
-
-function getTodayKey() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-}
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function getDueBucket(dueDate: string | null): DueBucket {
-  if (!dueDate) {
-    return "none";
-  }
-
-  const now = new Date();
-  const today = startOfDay(now);
-  const due = startOfDay(new Date(`${dueDate}T00:00:00`));
-  const diffInDays = Math.floor(
-    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  if (diffInDays < 0) {
-    return "overdue";
-  }
-
-  if (diffInDays === 0) {
-    return "today";
-  }
-
-  if (diffInDays <= 7) {
-    return "week";
-  }
-
-  return "later";
-}
-
-const bucketOrder: DueBucket[] = ["overdue", "today", "week", "later", "none"];
-const taskSectionOrder: TaskSection[] = [...bucketOrder, "completed"];
-
-const bucketLabels: Record<TaskSection, string> = {
-  overdue: "Vencidas",
-  today: "Hoje",
-  week: "Semana",
-  later: "Depois",
-  none: "Sem prazo",
-  completed: "Concluídas",
-};
-
-const bucketStyles: Record<TaskSection, string> = {
-  overdue: "border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-200",
-  today: "border-teal-500 bg-teal-500/10 text-teal-700 dark:text-teal-200",
-  week: "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-200",
-  later:
-    "border-violet-500 bg-violet-500/10 text-violet-700 dark:text-violet-200",
-  none: "border-slate-400 bg-slate-500/10 text-slate-600 dark:text-white/60",
-  completed:
-    "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
-};
+const taskSectionOrder: TaskSection[] = ["active", "completed"];
 
 const taskOrderStorageKey = "taskboard_task_order";
 
@@ -312,9 +229,6 @@ export function TasksList({
       const storedView = window.localStorage.getItem(taskViewStorageKey);
       const isValidTaskView =
         storedView === "all" ||
-        storedView === "today" ||
-        storedView === "overdue" ||
-        storedView === "backlog" ||
         storedView === "work" ||
         storedView === "personal" ||
         storedView === "travel";
@@ -425,38 +339,8 @@ export function TasksList({
   }, [categorySuggestions, tasks]);
 
   const filteredTasks = useMemo(() => {
-    const todayKey = getTodayKey();
-
     return orderedTasks.filter((task) => {
       if (statusFilter !== "all" && task.status !== statusFilter) {
-        return false;
-      }
-
-      if (
-        viewFilter === "today" &&
-        task.planned_for !== todayKey &&
-        task.due_date !== todayKey
-      ) {
-        return false;
-      }
-
-      if (
-        viewFilter === "overdue" &&
-        (!task.due_date ||
-          task.due_date >= todayKey ||
-          task.status === "completed" ||
-          task.status === "canceled")
-      ) {
-        return false;
-      }
-
-      if (
-        viewFilter === "backlog" &&
-        (task.planned_for ||
-          task.due_date ||
-          task.status === "completed" ||
-          task.status === "canceled")
-      ) {
         return false;
       }
 
@@ -510,11 +394,7 @@ export function TasksList({
 
   const groupedTasks = useMemo(() => {
     const groups: Record<TaskSection, Task[]> = {
-      overdue: [],
-      today: [],
-      week: [],
-      later: [],
-      none: [],
+      active: [],
       completed: [],
     };
 
@@ -522,7 +402,7 @@ export function TasksList({
       if (task.status === "completed") {
         groups.completed.push(task);
       } else {
-        groups[getDueBucket(task.due_date)].push(task);
+        groups.active.push(task);
       }
     }
 
@@ -543,11 +423,7 @@ export function TasksList({
       title: task.title,
       description: task.description ?? "",
       category: task.category ?? "",
-      due_date: task.due_date ?? "",
-      planned_for: task.planned_for ?? "",
-      estimated_minutes: task.estimated_minutes?.toString() ?? "",
       priority: task.priority,
-      recurrence: task.recurrence,
     });
   };
 
@@ -573,15 +449,7 @@ export function TasksList({
       return;
     }
 
-    const taskById = new Map(tasks.map((task) => [task.id, task]));
-    const taskToMove = taskById.get(taskId);
-    const targetTask = taskById.get(targetTaskId);
-
-    if (
-      !taskToMove ||
-      !targetTask ||
-      getDueBucket(taskToMove.due_date) !== getDueBucket(targetTask.due_date)
-    ) {
+    if (!tasks.some((task) => task.id === taskId) || !tasks.some((task) => task.id === targetTaskId)) {
       return;
     }
 
@@ -602,36 +470,17 @@ export function TasksList({
     });
   };
 
-  const moveTaskToBucketEnd = (taskId: string, bucket: DueBucket) => {
-    const taskToMove = tasks.find((task) => task.id === taskId);
-
-    if (!taskToMove || getDueBucket(taskToMove.due_date) !== bucket) {
+  const moveTaskToEnd = (taskId: string) => {
+    if (!tasks.some((task) => task.id === taskId)) {
       return;
     }
 
     setTaskOrder((current) => {
       const currentIds = normalizeTaskOrder(current, tasks);
-      const lastTaskInBucket = [...orderedTasks]
-        .reverse()
-        .find(
-          (task) =>
-            task.id !== taskId && getDueBucket(task.due_date) === bucket,
-        );
-
-      if (!lastTaskInBucket) {
-        return current;
-      }
-
       const nextOrder = currentIds.filter(
         (currentTaskId) => currentTaskId !== taskId,
       );
-      const targetIndex = nextOrder.indexOf(lastTaskInBucket.id);
-
-      if (targetIndex === -1) {
-        return current;
-      }
-
-      nextOrder.splice(targetIndex + 1, 0, taskId);
+      nextOrder.push(taskId);
       saveTaskOrder(nextOrder);
       return nextOrder;
     });
@@ -670,16 +519,13 @@ export function TasksList({
     handleDragEnd();
   };
 
-  const handleDropOnBucket = (
-    event: DragEvent<HTMLUListElement>,
-    bucket: DueBucket,
-  ) => {
+  const handleDropOnList = (event: DragEvent<HTMLUListElement>) => {
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
 
     if (taskId) {
-      moveTaskToBucketEnd(taskId, bucket);
+      moveTaskToEnd(taskId);
     }
 
     handleDragEnd();
@@ -738,9 +584,6 @@ export function TasksList({
         <div className="mt-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {[
             ["all", "Todas"],
-            ["today", "Hoje"],
-            ["overdue", "Atrasadas"],
-            ["backlog", "Backlog"],
             ["work", "Trabalho"],
             ["personal", "Pessoal"],
             ["travel", "Viagem"],
@@ -833,16 +676,16 @@ export function TasksList({
         </div>
       ) : (
         <div className="space-y-6">
-          {taskSectionOrder.map((bucket) => {
-            const tasksByBucket = groupedTasks[bucket];
-            const isCompletedSection = bucket === "completed";
+          {taskSectionOrder.map((section) => {
+            const tasksByBucket = groupedTasks[section];
+            const isCompletedSection = section === "completed";
 
             if (!tasksByBucket.length) {
               return null;
             }
 
             return (
-              <section key={bucket} className="min-w-0 space-y-3">
+              <section key={section} className="min-w-0 space-y-3">
                 {isCompletedSection ? (
                   <button
                     type="button"
@@ -875,9 +718,9 @@ export function TasksList({
                 ) : (
                   <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className={`h-7 rounded-full border px-3 py-1 text-xs font-semibold ${bucketStyles[bucket]}`}
+                      className="h-7 rounded-full border border-teal-500 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-700 dark:text-teal-200"
                     >
-                      {bucketLabels[bucket]}
+                      Tarefas ativas
                     </span>
                     <div className="h-px flex-1 bg-slate-900/10 dark:bg-white/10" />
                     <span className="text-xs text-slate-500 dark:text-white/45">
@@ -898,7 +741,7 @@ export function TasksList({
                     onDrop={
                       isCompletedSection
                         ? undefined
-                        : (event) => handleDropOnBucket(event, bucket)
+                        : handleDropOnList
                     }
                   >
                     {tasksByBucket.map((task) => {
@@ -999,16 +842,6 @@ export function TasksList({
                                       priority: editingState.priority,
                                       category:
                                         editingState.category.trim() || null,
-                                      due_date: editingState.due_date || null,
-                                      planned_for:
-                                        editingState.planned_for || null,
-                                      estimated_minutes:
-                                        editingState.estimated_minutes
-                                          ? Number(
-                                              editingState.estimated_minutes,
-                                            )
-                                          : null,
-                                      recurrence: editingState.recurrence,
                                     });
                                     if (!taskWasUpdated) return;
 
@@ -1115,58 +948,9 @@ export function TasksList({
                                         {task.attachments.length}
                                       </Badge>
                                     ) : null}
-                                    <Badge variant="outline" className="gap-1">
-                                      <CalendarClock className="size-3" />
-                                      Prazo {formatDate(task.due_date)}
-                                    </Badge>
-                                    {!isCompact ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="gap-1"
-                                      >
-                                        <CalendarCheck className="size-3" />
-                                        Fazer {formatDate(task.planned_for)}
-                                      </Badge>
-                                    ) : null}
-                                    {!isCompact && task.estimated_minutes ? (
-                                      <Badge variant="outline">
-                                        Est. {task.estimated_minutes}m
-                                      </Badge>
-                                    ) : null}
-                                    {!isCompact &&
-                                    task.recurrence !== "none" ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="gap-1"
-                                      >
-                                        <Repeat className="size-3" />
-                                        {getRecurrenceLabel(task.recurrence)}
-                                      </Badge>
-                                    ) : null}
                                   </div>
                                 </>
                               )}
-
-                              <div
-                                className={[
-                                  "flex flex-wrap gap-2 text-xs text-slate-500 dark:text-white/40",
-                                  isCompact ? "hidden" : "",
-                                ].join(" ")}
-                              >
-                                <span>
-                                  Criada em {formatDateTime(task.created_at)}
-                                </span>
-                                {task.completed_at ? (
-                                  <span>
-                                    Concluída em{" "}
-                                    {formatDateTime(task.completed_at)}
-                                  </span>
-                                ) : null}
-                                <span>
-                                  Atualizada em{" "}
-                                  {formatDateTime(task.updated_at)}
-                                </span>
-                              </div>
 
                               {isCompact && hasSubtasks ? (
                                 <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
@@ -1663,12 +1447,7 @@ function TaskEditForm({
     editingState.title !== task.title ||
     editingState.description !== (task.description ?? "") ||
     editingState.category !== (task.category ?? "") ||
-    editingState.due_date !== (task.due_date ?? "") ||
-    editingState.planned_for !== (task.planned_for ?? "") ||
-    editingState.estimated_minutes !==
-      (task.estimated_minutes?.toString() ?? "") ||
-    editingState.priority !== task.priority ||
-    editingState.recurrence !== task.recurrence;
+    editingState.priority !== task.priority;
   const hasChanges =
     hasDetailChanges ||
     pendingAttachments.length > 0 ||
@@ -1818,7 +1597,7 @@ function TaskEditForm({
         ) : null}
       </div>
 
-      <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
         <Select
           value={editingState.priority}
           disabled={isSaving}
@@ -1858,74 +1637,6 @@ function TaskEditForm({
           list="category-suggestions-edit"
         />
 
-        <Input
-          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
-          type="date"
-          disabled={isSaving}
-          value={editingState.due_date}
-          onChange={(event) =>
-            setEditingState((current) =>
-              current ? { ...current, due_date: event.target.value } : current,
-            )
-          }
-        />
-
-        <Input
-          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
-          type="date"
-          disabled={isSaving}
-          value={editingState.planned_for}
-          onChange={(event) =>
-            setEditingState((current) =>
-              current
-                ? { ...current, planned_for: event.target.value }
-                : current,
-            )
-          }
-        />
-
-        <Input
-          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
-          type="number"
-          min={1}
-          disabled={isSaving}
-          value={editingState.estimated_minutes}
-          onChange={(event) =>
-            setEditingState((current) =>
-              current
-                ? { ...current, estimated_minutes: event.target.value }
-                : current,
-            )
-          }
-          placeholder="Estimativa"
-        />
-
-        <Select
-          value={editingState.recurrence}
-          disabled={isSaving}
-          onValueChange={(value) =>
-            setEditingState((current) =>
-              current
-                ? {
-                    ...current,
-                    recurrence: (value ?? "none") as TaskRecurrence,
-                  }
-                : current,
-            )
-          }
-        >
-          <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20">
-            <span className="flex h-full items-center text-sm">
-              {getRecurrenceLabel(editingState.recurrence)}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Sem recorrência</SelectItem>
-            <SelectItem value="daily">Diária</SelectItem>
-            <SelectItem value="weekly">Semanal</SelectItem>
-            <SelectItem value="monthly">Mensal</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="flex gap-2">

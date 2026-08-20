@@ -9,11 +9,6 @@ create table if not exists public.tasks (
   status text not null default 'pending' check (status in ('pending', 'in_progress', 'completed', 'canceled')),
   priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
   category text,
-  due_date date,
-  planned_for date,
-  estimated_minutes integer check (estimated_minutes is null or estimated_minutes > 0),
-  recurrence text not null default 'none' check (recurrence in ('none', 'daily', 'weekly', 'monthly')),
-  recurring_parent_id uuid references public.tasks(id) on delete set null,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
   updated_at timestamptz not null default now()
@@ -46,11 +41,8 @@ alter table public.task_attachments
 
 create index if not exists idx_tasks_created_at_desc on public.tasks (created_at desc);
 create index if not exists idx_tasks_status on public.tasks (status);
-create index if not exists idx_tasks_due_date on public.tasks (due_date);
-create index if not exists idx_tasks_planned_for on public.tasks (planned_for);
 create index if not exists idx_tasks_priority on public.tasks (priority);
 create index if not exists idx_tasks_category on public.tasks (category);
-create index if not exists idx_tasks_recurrence on public.tasks (recurrence);
 create index if not exists idx_subtasks_task_id on public.subtasks (task_id);
 create index if not exists idx_task_attachments_task_id on public.task_attachments (task_id);
 
