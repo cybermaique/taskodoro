@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/toast";
 import type { Note } from "@/types/note";
 import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
 
@@ -85,6 +86,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   const [hasUnsavedTaskEdit, setHasUnsavedTaskEdit] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const toast = useToast();
   const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
     if (typeof window === "undefined") {
       return "full";
@@ -100,9 +102,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     }
 
     const stored = window.localStorage.getItem("taskboard_selected_tab");
-    return stored === "task-form" ||
-      stored === "tasks" ||
-      stored === "notes"
+    return stored === "task-form" || stored === "tasks" || stored === "notes"
       ? stored
       : "tasks";
   });
@@ -205,18 +205,28 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       for (const attachment of values.attachments ?? []) {
         const formData = new FormData();
         formData.append("file", attachment);
-        const uploadResponse = await fetch(`/api/tasks/${createdTask.id}/attachments`, {
-          method: "POST",
-          body: formData,
-        });
-        const uploadData = (await uploadResponse.json()) as { task?: Task; error?: string };
+        const uploadResponse = await fetch(
+          `/api/tasks/${createdTask.id}/attachments`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+        const uploadData = (await uploadResponse.json()) as {
+          task?: Task;
+          error?: string;
+        };
         if (!uploadResponse.ok || !uploadData.task) {
-          throw new Error(uploadData.error ?? "A tarefa foi criada, mas não foi possível anexar um arquivo.");
+          throw new Error(
+            uploadData.error ??
+              "A tarefa foi criada, mas não foi possível anexar um arquivo.",
+          );
         }
         createdTask = uploadData.task;
       }
 
       setTasks((current) => upsertTask(current, createdTask));
+      toast.success("Tarefa criada com sucesso!");
     } finally {
       setCreatingTask(false);
     }
@@ -264,10 +274,14 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
     try {
       await updateTask(taskId, payload);
+      toast.success("Tarefa atualizada!");
+      return true;
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erro ao atualizar tarefa.",
-      );
+      const msg =
+        error instanceof Error ? error.message : "Erro ao atualizar tarefa.";
+      setErrorMessage(msg);
+      toast.error(msg);
+      return false;
     } finally {
       setBusyTaskId(null);
     }
@@ -294,10 +308,12 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => current.filter((task) => task.id !== taskId));
+      toast.success("Tarefa excluída!");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erro ao excluir tarefa.",
-      );
+      const msg =
+        error instanceof Error ? error.message : "Erro ao excluir tarefa.";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setBusyTaskId(null);
     }
@@ -314,10 +330,15 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         body: formData,
       });
       const data = (await response.json()) as { task?: Task; error?: string };
-      if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível anexar a imagem.");
+      if (!response.ok || !data.task)
+        throw new Error(data.error ?? "Não foi possível anexar a imagem.");
       setTasks((current) => upsertTask(current, data.task as Task));
+      toast.success("Arquivo anexado!");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao anexar imagem.");
+      const msg =
+        error instanceof Error ? error.message : "Erro ao anexar imagem.";
+      setErrorMessage(msg);
+      toast.error(msg);
       throw error;
     } finally {
       setBusyTaskId(null);
@@ -328,12 +349,20 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     setBusyTaskId(taskId);
     setErrorMessage(null);
     try {
-      const response = await fetch(`/api/tasks/${taskId}/attachments/${attachmentId}`, { method: "DELETE" });
+      const response = await fetch(
+        `/api/tasks/${taskId}/attachments/${attachmentId}`,
+        { method: "DELETE" },
+      );
       const data = (await response.json()) as { task?: Task; error?: string };
-      if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível excluir a imagem.");
+      if (!response.ok || !data.task)
+        throw new Error(data.error ?? "Não foi possível excluir a imagem.");
       setTasks((current) => upsertTask(current, data.task as Task));
+      toast.success("Anexo removido!");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Erro ao excluir imagem.");
+      const msg =
+        error instanceof Error ? error.message : "Erro ao excluir imagem.";
+      setErrorMessage(msg);
+      toast.error(msg);
       throw error;
     } finally {
       setBusyTaskId(null);
@@ -360,10 +389,12 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => upsertTask(current, data.task as Task));
+      toast.success("Subtarefa criada!");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erro ao criar subtarefa.",
-      );
+      const msg =
+        error instanceof Error ? error.message : "Erro ao criar subtarefa.";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setBusyTaskId(null);
     }
@@ -391,9 +422,10 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
       setTasks((current) => upsertTask(current, data.task as Task));
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erro ao atualizar subtarefa.",
-      );
+      const msg =
+        error instanceof Error ? error.message : "Erro ao atualizar subtarefa.";
+      setErrorMessage(msg);
+      toast.error(msg);
     }
   };
 
@@ -412,10 +444,12 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => upsertTask(current, data.task as Task));
+      toast.success("Subtarefa excluída!");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Erro ao excluir subtarefa.",
-      );
+      const msg =
+        error instanceof Error ? error.message : "Erro ao excluir subtarefa.";
+      setErrorMessage(msg);
+      toast.error(msg);
     }
   };
 
@@ -441,7 +475,9 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     if (
       nextTab !== selectedTab &&
       hasUnsavedTaskChanges &&
-      !window.confirm("Você tem alterações não salvas. Deseja continuar mesmo assim?")
+      !window.confirm(
+        "Você tem alterações não salvas. Deseja continuar mesmo assim?",
+      )
     ) {
       return;
     }
@@ -462,7 +498,9 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             {!isCompact ? (
               <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase leading-tight text-slate-600 shadow-sm sm:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white/60">
                 <ListTodo className="size-3.5" />
-                <span className="min-w-0">Organização pessoal e profissional</span>
+                <span className="min-w-0">
+                  Organização pessoal e profissional
+                </span>
               </div>
             ) : null}
             <div>

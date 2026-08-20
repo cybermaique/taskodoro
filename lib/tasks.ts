@@ -44,7 +44,7 @@ const TASK_COLUMNS = `
     is_completed,
     created_at,
     updated_at
-  ),
+  )
 `;
 
 const SUBTASK_COLUMNS = "id,task_id,title,is_completed,created_at,updated_at";
