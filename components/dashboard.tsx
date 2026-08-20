@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   CircleDot,
   ListTodo,
-  MoveRight,
   StickyNote,
 } from "lucide-react";
 
@@ -18,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import type { Note } from "@/types/note";
-import type { Task, TaskPriority, TaskRecurrence } from "@/types/task";
+import type { Task, TaskPriority } from "@/types/task";
 
 const APP_TITLE = "Taskboard";
 const DEFAULT_CATEGORIES = [
@@ -40,7 +39,6 @@ function sortByMostRecent(tasks: Task[]) {
       new Date(left.created_at).getTime(),
   );
 }
-
 function upsertTask(tasks: Task[], nextTask: Task) {
   const exists = tasks.some((task) => task.id === nextTask.id);
   const updated = exists
@@ -48,25 +46,6 @@ function upsertTask(tasks: Task[], nextTask: Task) {
     : [nextTask, ...tasks];
 
   return sortByMostRecent(updated);
-}
-
-function toDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function addDaysKey(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return toDateKey(date);
-}
-
-function startOfWeek(date: Date) {
-  const next = new Date(date);
-  const day = next.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  next.setHours(0, 0, 0, 0);
-  next.setDate(next.getDate() + diff);
-  return next;
 }
 
 interface DashboardProps {
@@ -138,37 +117,14 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   }, [selectedTab]);
 
   const dashboardStats = useMemo(() => {
-    const todayKey = toDateKey(new Date());
-    const weekStart = startOfWeek(new Date());
     const pending = tasks.filter((task) => task.status === "pending").length;
     const completed = tasks.filter(
       (task) => task.status === "completed",
-    ).length;
-    const overdue = tasks.filter(
-      (task) =>
-        task.status !== "completed" &&
-        task.status !== "canceled" &&
-        task.due_date &&
-        task.due_date < todayKey,
-    ).length;
-    const completedWeek = tasks.filter(
-      (task) =>
-        task.status === "completed" &&
-        task.completed_at &&
-        new Date(task.completed_at) >= weekStart,
     ).length;
 
     return {
       pending,
       completed,
-      overdue,
-      completedWeek,
-      dueToday: tasks.filter(
-        (task) =>
-          task.status !== "completed" &&
-          task.status !== "canceled" &&
-          (task.planned_for === todayKey || task.due_date === todayKey),
-      ).length,
     };
   }, [tasks]);
 
@@ -177,10 +133,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     description?: string;
     priority?: TaskPriority;
     category?: string | null;
-    due_date?: string | null;
-    planned_for?: string | null;
-    estimated_minutes?: number | null;
-    recurrence?: TaskRecurrence;
     attachments?: File[];
   }) => {
     setCreatingTask(true);
@@ -252,17 +204,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
     setTasks((current) => upsertTask(current, data.task as Task));
 
-    if (payload.status === "completed" && data.task.recurrence !== "none") {
-      const listResponse = await fetch("/api/tasks", { cache: "no-store" });
-      const listData = (await listResponse.json()) as {
-        tasks?: Task[];
-        error?: string;
-      };
-
-      if (listResponse.ok && listData.tasks) {
-        setTasks(sortByMostRecent(listData.tasks));
-      }
-    }
   };
 
   const updateTaskWithBusy = async (
@@ -453,23 +394,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     }
   };
 
-  const moveTodayToTomorrow = async () => {
-    const todayKey = toDateKey(new Date());
-    const tomorrowKey = addDaysKey(1);
-    const tasksToMove = tasks.filter(
-      (task) =>
-        task.status !== "completed" &&
-        task.status !== "canceled" &&
-        task.planned_for === todayKey,
-    );
-
-    await Promise.all(
-      tasksToMove.map((task) =>
-        updateTask(task.id, { planned_for: tomorrowKey }),
-      ),
-    );
-  };
-
   const handleTabChange = (value: string) => {
     const nextTab = value as DashboardTab;
     if (
@@ -619,39 +543,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
           <TabsContent value="tasks" className="min-w-0">
             <section className="min-w-0">
               <div className={isCompact ? "space-y-0" : "space-y-5"}>
-                {!isCompact ? (
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
-                    <MiniMetric
-                      title="Hoje"
-                      value={dashboardStats.dueToday}
-                      caption="planejadas ou com prazo"
-                    />
-                    <MiniMetric
-                      title="Atrasadas"
-                      value={dashboardStats.overdue}
-                      caption="pedem atenção"
-                    />
-                    <MiniMetric
-                      title="Semana"
-                      value={dashboardStats.completedWeek}
-                      caption={`${dashboardStats.completedWeek} concluídas`}
-                    />
-                  </div>
-                ) : null}
-
-                {!isCompact ? (
-                  <div className="grid gap-2 sm:flex sm:flex-wrap">
-                    <Button
-                      variant="outline"
-                      className="min-h-11 w-full rounded-full whitespace-normal sm:min-h-8 sm:w-auto"
-                      onClick={moveTodayToTomorrow}
-                    >
-                      <MoveRight className="size-4" />
-                      Mover hoje para amanhã
-                    </Button>
-                  </div>
-                ) : null}
-
                 <TasksList
                   tasks={tasks}
                   busyTaskId={busyTaskId}
@@ -720,32 +611,6 @@ function StatPill({
       <Icon className="size-4 text-teal-600 dark:text-teal-300" />
       <span className="text-slate-500 dark:text-white/55">{label}</span>
       <strong>{value}</strong>
-    </div>
-  );
-}
-
-function MiniMetric({
-  title,
-  value,
-  caption,
-}: {
-  title: string;
-  value: string | number;
-  caption: string;
-}) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.06]">
-      <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">
-        {title}
-      </p>
-      <div className="mt-2 min-w-0 sm:flex sm:items-end sm:justify-between sm:gap-3">
-        <strong className="block break-words text-xl leading-none sm:text-2xl">
-          {value}
-        </strong>
-        <span className="mt-1 block break-words text-left text-xs text-slate-500 sm:mt-0 sm:text-right dark:text-white/45">
-          {caption}
-        </span>
-      </div>
     </div>
   );
 }

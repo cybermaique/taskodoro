@@ -1,6 +1,5 @@
 export type TaskStatus = "pending" | "in_progress" | "completed" | "canceled";
 export type TaskPriority = "low" | "medium" | "high";
-export type TaskRecurrence = "none" | "daily" | "weekly" | "monthly";
 
 export interface Subtask {
   id: string;
@@ -27,11 +26,6 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   category: string | null;
-  due_date: string | null;
-  planned_for: string | null;
-  estimated_minutes: number | null;
-  recurrence: TaskRecurrence;
-  recurring_parent_id: string | null;
   created_at: string;
   completed_at: string | null;
   updated_at: string;
@@ -40,24 +34,13 @@ export interface Task {
 }
 
 export type TaskFilter = "all" | TaskStatus;
-export type TaskView =
-  | "all"
-  | "today"
-  | "overdue"
-  | "backlog"
-  | "work"
-  | "personal"
-  | "travel";
+export type TaskView = "all" | "work" | "personal" | "travel";
 
 export interface CreateTaskInput {
   title: string;
   description?: string;
   priority?: TaskPriority;
   category?: string | null;
-  due_date?: string | null;
-  planned_for?: string | null;
-  estimated_minutes?: number | null;
-  recurrence?: TaskRecurrence;
 }
 
 export interface UpdateTaskInput {
@@ -66,10 +49,6 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   priority?: TaskPriority;
   category?: string | null;
-  due_date?: string | null;
-  planned_for?: string | null;
-  estimated_minutes?: number | null;
-  recurrence?: TaskRecurrence;
 }
 
 export interface CreateSubtaskInput {

@@ -124,6 +124,12 @@ function parseNoteContent(content: string): NoteContentBlock[] {
   return blocks.length > 0 ? blocks : [{ type: "text", content }];
 }
 
+function getCopyableNoteContent(content: string) {
+  return content
+    .replace(/```[^\r\n]*\r?\n([\s\S]*?)```/g, "$1")
+    .trim();
+}
+
 function getPreview(content: string) {
   const lines = content.split(/\r?\n/);
   const linePreview = lines.slice(0, NOTE_PREVIEW_MAX_LINES).join("\n");
@@ -390,7 +396,7 @@ function NoteCard({
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(note.content);
+    await navigator.clipboard.writeText(getCopyableNoteContent(note.content));
     setCopied(true);
   };
 
@@ -505,6 +511,19 @@ function NoteCard({
     >
       {/* actions */}
       <div className="-mr-1 -mt-1 mb-1 flex items-center justify-end gap-1 opacity-100 transition-opacity sm:absolute sm:right-3 sm:top-3 sm:m-0 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+        {!editing && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 rounded-xl text-slate-500 hover:text-slate-700 sm:size-7 sm:text-slate-400 dark:hover:text-white"
+            aria-label={copied ? "Anotação copiada" : "Copiar anotação"}
+            title={copied ? "Copiado" : "Copiar anotação"}
+            onClick={handleCopy}
+          >
+            <Copy className="size-3.5" />
+          </Button>
+        )}
         {!editing && (
           <Button
             type="button"
