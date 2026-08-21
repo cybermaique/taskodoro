@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Circle,
   CirclePlus,
-  GripVertical,
   Pencil,
   Search,
   Trash2,
@@ -41,6 +40,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TaskDescription } from "@/components/task-description";
+import { TaskDropCelebration } from "@/components/task-drop-celebration";
 import {
   Select,
   SelectContent,
@@ -67,7 +68,7 @@ interface TasksListProps {
   ) => Promise<boolean>;
   onAddAttachment: (taskId: string, file: File) => Promise<void>;
   onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
-  onCreateSubtask: (taskId: string, title: string) => Promise<void>;
+  onCreateSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
 }
@@ -140,6 +141,13 @@ const taskSectionStyles: Record<TaskSection, string> = {
   completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
 };
 
+const taskCardBorderStyles: Record<TaskSection, string> = {
+  not_started: "border-slate-400/25 dark:border-slate-400/20",
+  in_progress: "border-sky-500/30 dark:border-sky-400/25",
+  waiting: "border-amber-500/30 dark:border-amber-400/25",
+  completed: "border-emerald-500/25 dark:border-emerald-400/25",
+};
+
 const taskOrderStorageKey = "taskboard_task_order";
 const taskColumnWidthsStorageKey = "taskboard_task_column_widths";
 const minTaskColumnWidth = 208;
@@ -155,6 +163,18 @@ interface ColumnResizeState {
   startLeftWidth: number;
   startRightWidth: number;
   startWidths: TaskColumnWidths;
+}
+
+interface DropPoint {
+  x: number;
+  y: number;
+}
+
+interface DropCelebration {
+  id: number;
+  taskId: string;
+  point: DropPoint;
+  variant: "move" | "complete";
 }
 
 function areEqualStringArrays(left: string[], right: string[]) {
@@ -257,6 +277,8 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dropCelebration, setDropCelebration] =
+    useState<DropCelebration | null>(null);
   const [taskColumnWidths, setTaskColumnWidths] =
     useState<TaskColumnWidths | null>(null);
   const [canResizeColumns, setCanResizeColumns] = useState(false);
@@ -279,6 +301,16 @@ export function TasksList({
   const [deletingConfirm, setDeletingConfirm] = useState(false);
   const columnRefs = useRef<Partial<Record<TaskSection, HTMLElement | null>>>({});
   const resizeStateRef = useRef<ColumnResizeState | null>(null);
+  const dropCelebrationTimeoutRef = useRef<number | null>(null);
+  const dropCelebrationSequenceRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (dropCelebrationTimeoutRef.current !== null) {
+        window.clearTimeout(dropCelebrationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -506,7 +538,8 @@ export function TasksList({
       return;
     }
 
-    await onCreateSubtask(taskId, title);
+    const wasCreated = await onCreateSubtask(taskId, title);
+    if (!wasCreated) return;
     setSubtaskDraftByTaskId((current) => ({ ...current, [taskId]: "" }));
   };
 
@@ -563,6 +596,35 @@ export function TasksList({
     setDragOverTaskId(null);
   };
 
+  const celebrateDrop = (
+    taskId: string,
+    point: DropPoint,
+    variant: DropCelebration["variant"],
+  ) => {
+    if (dropCelebrationTimeoutRef.current !== null) {
+      window.clearTimeout(dropCelebrationTimeoutRef.current);
+    }
+
+    dropCelebrationSequenceRef.current += 1;
+    const celebrationId = dropCelebrationSequenceRef.current;
+    setDropCelebration({ id: celebrationId, taskId, point, variant });
+    dropCelebrationTimeoutRef.current = window.setTimeout(() => {
+      setDropCelebration((current) =>
+        current?.id === celebrationId ? null : current,
+      );
+      dropCelebrationTimeoutRef.current = null;
+    }, 2800);
+  };
+
+  const getDropPoint = (event: DragEvent<HTMLElement>): DropPoint => {
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    return {
+      x: event.clientX || rect.left + rect.width / 2,
+      y: event.clientY || rect.top + rect.height / 2,
+    };
+  };
+
   const handleDragOver = (event: DragEvent, taskId?: string) => {
     event.preventDefault();
     event.stopPropagation();
@@ -577,17 +639,28 @@ export function TasksList({
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+    const dropPoint = getDropPoint(event);
+    handleDragEnd();
 
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
       const targetTask = tasks.find((task) => task.id === targetTaskId);
       if (taskToMove && targetTask && taskToMove.status !== targetTask.status) {
-        await onUpdateTask(taskId, { status: targetTask.status });
+        const wasUpdated = await onUpdateTask(taskId, {
+          status: targetTask.status,
+        });
+        if (!wasUpdated) return;
       }
       moveTaskBefore(taskId, targetTaskId);
+      celebrateDrop(
+        taskId,
+        dropPoint,
+        taskToMove?.status !== "completed" &&
+          targetTask?.status === "completed"
+          ? "complete"
+          : "move",
+      );
     }
-
-    handleDragEnd();
   };
 
   const handleDropOnColumn = async (
@@ -597,16 +670,24 @@ export function TasksList({
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+    const dropPoint = getDropPoint(event);
+    handleDragEnd();
 
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
       if (taskToMove && taskToMove.status !== status) {
-        await onUpdateTask(taskId, { status });
+        const wasUpdated = await onUpdateTask(taskId, { status });
+        if (!wasUpdated) return;
       }
       moveTaskToEnd(taskId);
+      celebrateDrop(
+        taskId,
+        dropPoint,
+        taskToMove?.status !== "completed" && status === "completed"
+          ? "complete"
+          : "move",
+      );
     }
-
-    handleDragEnd();
   };
 
   const startColumnResize = (
@@ -855,6 +936,12 @@ export function TasksList({
                       return (
                         <li
                           key={task.id}
+                          data-tilt-card
+                          draggable={!isEditing}
+                          onDragStart={(event) =>
+                            handleDragStart(event, task.id)
+                          }
+                          onDragEnd={handleDragEnd}
                           onClick={(event) => {
                             const target = event.target;
                             if (
@@ -868,13 +955,16 @@ export function TasksList({
                           onDragOver={(event) => handleDragOver(event, task.id)}
                           onDrop={(event) => handleDropOnTask(event, task.id)}
                           className={[
-                            "group flex min-w-0 cursor-pointer flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                            "app-list-item-enter group flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                             draggingTaskId === task.id
-                              ? "scale-[0.99] opacity-55"
+                              ? "task-card-dragging z-20 opacity-70"
                               : "",
                             dragOverTaskId === task.id &&
                             draggingTaskId !== task.id
-                              ? "ring-2 ring-teal-400/60"
+                              ? "task-card-drop-target z-10 ring-2 ring-teal-400/70"
+                              : "",
+                            dropCelebration?.taskId === task.id
+                              ? "task-card-drop-celebration z-20"
                               : "",
                             isEditing
                               ? "h-auto overflow-visible"
@@ -884,45 +974,21 @@ export function TasksList({
                             isCompact
                               ? "rounded-2xl p-2.5"
                               : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
-                            isCompleted
-                              ? "border-emerald-500/25"
-                              : "border-slate-900/10 dark:border-white/10",
+                            taskCardBorderStyles[task.status],
                           ].join(" ")}
                         >
                           {isCompleted ? (
                             <button
                               type="button"
-                              draggable={!isEditing}
-                              onDragStart={(event) =>
-                                handleDragStart(event, task.id)
-                              }
-                              onDragEnd={handleDragEnd}
                               onClick={() => setDetailsTaskId(task.id)}
-                              className="line-clamp-2 w-full cursor-grab text-left text-sm font-semibold leading-snug text-slate-500 active:cursor-grabbing dark:text-white/55"
-                              aria-label={`Abrir ou arrastar tarefa finalizada: ${task.title}`}
-                              aria-grabbed={draggingTaskId === task.id}
-                              title="Clique para abrir ou arraste para mover"
+                              className="line-clamp-2 w-full text-left text-sm font-semibold leading-snug text-slate-500 dark:text-white/55"
+                              aria-label={`Abrir tarefa finalizada: ${task.title}`}
                             >
                               {task.title}
                             </button>
                           ) : (
                           <div className="flex min-w-0 flex-1 flex-col gap-3">
-                            <div className="flex min-w-0 items-start gap-2">
-                            <button
-                              type="button"
-                              draggable={!isEditing && !isCompleted}
-                              onDragStart={(event) =>
-                                handleDragStart(event, task.id)
-                              }
-                              onDragEnd={handleDragEnd}
-                              className="inline-flex size-8 shrink-0 touch-manipulation cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing dark:hover:bg-white/10 dark:hover:text-white/70"
-                              aria-label="Arrastar tarefa"
-                              aria-grabbed={draggingTaskId === task.id}
-                              title="Arrastar tarefa"
-                            >
-                              <GripVertical className="size-4" />
-                            </button>
-
+                            <div className="flex min-w-0 items-start">
                             <div
                               className={[
                                 "min-w-0 flex-1",
@@ -994,20 +1060,15 @@ export function TasksList({
                                       </button>
                                       {task.description ? (
                                         <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
-                                          {task.description}
+                                          <TaskDescription>
+                                            {task.description}
+                                          </TaskDescription>
                                         </p>
                                       ) : null}
                                     </div>
                                   </div>
 
                                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                    <Badge
-                                      variant={
-                                        isCompleted ? "secondary" : "default"
-                                      }
-                                    >
-                                      {getStatusLabel(task.status)}
-                                    </Badge>
                                     <Badge
                                       className={getPriorityClass(
                                         task.priority,
@@ -1045,7 +1106,7 @@ export function TasksList({
                                   </span>
                                   <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
                                     <div
-                                      className="h-full rounded-full bg-teal-500"
+                                      className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
                                       style={{ width: `${subtaskPercent}%` }}
                                     />
                                   </div>
@@ -1089,6 +1150,15 @@ export function TasksList({
           })}
         </div>
       )}
+
+      {dropCelebration ? (
+        <TaskDropCelebration
+          key={dropCelebration.id}
+          x={dropCelebration.point.x}
+          y={dropCelebration.point.y}
+          variant={dropCelebration.variant}
+        />
+      ) : null}
 
       <datalist id="category-suggestions-edit">
         {availableCategories.map((category) => (
@@ -1356,7 +1426,7 @@ function TaskDetailsDialog({
                       Descrição
                     </h3>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
-                      {task.description}
+                      <TaskDescription>{task.description}</TaskDescription>
                     </p>
                   </section>
                 ) : null}
@@ -1409,7 +1479,7 @@ function TaskDetailsDialog({
                       </div>
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
                         <div
-                          className="h-full rounded-full bg-teal-500"
+                          className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
                           style={{ width: `${subtaskPercent}%` }}
                         />
                       </div>
@@ -1421,7 +1491,7 @@ function TaskDetailsDialog({
                       {task.subtasks.map((subtask) => (
                         <li
                           key={subtask.id}
-                          className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 dark:bg-white/[0.045]"
+                          className="app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 dark:bg-white/[0.045]"
                         >
                           <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
                             <Checkbox
@@ -1467,11 +1537,16 @@ function TaskDetailsDialog({
 
                   <form
                     onSubmit={onSubmitSubtask}
-                    className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row"
+                    aria-busy={busy}
+                    className={[
+                      "mt-3 flex min-w-0 flex-col gap-2 rounded-xl sm:flex-row",
+                      busy ? "subtask-form-loading" : "",
+                    ].join(" ")}
                   >
                     <Input
                       className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
                       value={subtaskDraft}
+                      disabled={busy}
                       onChange={(event) =>
                         onSubtaskDraftChange(event.target.value)
                       }
@@ -1482,9 +1557,14 @@ function TaskDetailsDialog({
                       type="submit"
                       variant="outline"
                       className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
+                      disabled={busy || !subtaskDraft.trim()}
                     >
-                      <CirclePlus className="size-4" />
-                      Adicionar
+                      {busy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CirclePlus className="size-4" />
+                      )}
+                      {busy ? "Adicionando…" : "Adicionar"}
                     </Button>
                   </form>
                 </section>
