@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  createContext,
   type FormEvent,
   type ReactNode,
+  useContext,
   useCallback,
   useEffect,
   useRef,
@@ -10,15 +12,12 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { Loader2, LogIn, LogOut, Sparkles, UserPlus } from "lucide-react";
+import { Loader2, LogIn, Sparkles, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  SoundToggle,
-  useSensoryEffects,
-} from "@/components/sensory-effects";
+import { useSensoryEffects } from "@/components/sensory-effects";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 function AccessTransition({ message }: { message: string }) {
@@ -35,9 +34,29 @@ function AccessTransition({ message }: { message: string }) {
   );
 }
 
+function getFallbackNickname(email: string | undefined) {
+  return email?.split("@")[0]?.trim() || "Usuário";
+}
+
+interface AccessActionsContextValue {
+  signOut: () => Promise<void>;
+}
+
+const AccessActionsContext = createContext<AccessActionsContextValue | null>(
+  null,
+);
+
+export function useAccessActions() {
+  const context = useContext(AccessActionsContext);
+  if (!context) {
+    throw new Error("useAccessActions must be used within AccessGate");
+  }
+  return context;
+}
+
 export function AccessGate({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { playSound } = useSensoryEffects();
+  const { playSound, unlockAudio } = useSensoryEffects();
   const [session, setSession] = useState<Session | null | undefined>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,6 +65,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [isEnteringApp, setIsEnteringApp] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [profileNickname, setProfileNickname] = useState<string | null>(null);
+  const [transitionMessage, setTransitionMessage] = useState(
+    "Preparando seu espaço…",
+  );
   const refreshedSessionId = useRef<string | null>(null);
 
   const syncSession = useCallback(
@@ -53,6 +76,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       setSession(nextSession);
 
       if (!nextSession) {
+        setProfileNickname(null);
         refreshedSessionId.current = null;
         return;
       }
@@ -76,8 +100,35 @@ export function AccessGate({ children }: { children: ReactNode }) {
     return () => listener.subscription.unsubscribe();
   }, [syncSession]);
 
+  useEffect(() => {
+    let isCurrent = true;
+    if (!session) {
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    void createSupabaseBrowserClient()
+      .from("profiles")
+      .select("nickname")
+      .eq("id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (isCurrent) {
+          setProfileNickname(
+            data?.nickname?.trim() || getFallbackNickname(session.user.email),
+          );
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [session]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    unlockAudio();
     setIsSubmitting(true);
     setMessage(null);
 
@@ -101,12 +152,20 @@ export function AccessGate({ children }: { children: ReactNode }) {
     }
 
     playSound("login");
+    setTransitionMessage(
+      `Preparando seu espaço${profileNickname ? `, ${profileNickname}` : ""}…`,
+    );
     setIsEnteringApp(true);
-    window.setTimeout(() => window.location.reload(), 900);
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    window.location.reload();
   };
 
   const signOut = async () => {
+    unlockAudio();
     setIsSigningOut(true);
+    setTransitionMessage(
+      profileNickname ? `Até logo, ${profileNickname}!` : "Até a próxima!",
+    );
     playSound("logout");
     await new Promise((resolve) => window.setTimeout(resolve, 520));
     await createSupabaseBrowserClient().auth.signOut();
@@ -124,7 +183,18 @@ export function AccessGate({ children }: { children: ReactNode }) {
   }
 
   if (isEnteringApp || (session && isSubmitting)) {
+    if (profileNickname) {
+      return (
+        <AccessTransition
+          message={transitionMessage}
+        />
+      );
+    }
     return <AccessTransition message="Preparando seu espaço…" />;
+  }
+
+  if (isSigningOut && profileNickname) {
+    return <AccessTransition message={transitionMessage} />;
   }
 
   if (isSigningOut) {
@@ -133,18 +203,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   if (session) {
     return (
-      <>
-        <Button
-          type="button"
-          variant="ghost"
-          className="app-floating-control fixed right-3 top-3 z-50 gap-1.5 bg-background/80 backdrop-blur"
-          onClick={() => void signOut()}
-        >
-          <LogOut className="size-4" />
-          Sair
-        </Button>
+      <AccessActionsContext.Provider value={{ signOut }}>
         {children}
-      </>
+      </AccessActionsContext.Provider>
     );
   }
 
@@ -160,7 +221,6 @@ export function AccessGate({ children }: { children: ReactNode }) {
         className="access-card-enter relative z-10 w-full max-w-md overflow-hidden border-border/70 bg-background/82 shadow-2xl backdrop-blur-xl"
       >
         <span className="access-card-shine" />
-        <SoundToggle className="absolute right-3 top-3 z-20" />
         <CardHeader className="items-center text-center">
           <span className="access-login-icon">
             {isSignUp ? (

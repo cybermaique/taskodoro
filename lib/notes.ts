@@ -3,7 +3,8 @@ import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { CreateNoteInput, Note, UpdateNoteInput } from "@/types/note";
 
-const NOTE_COLUMNS = "id,title,content,tags,created_at,updated_at";
+const NOTE_COLUMNS =
+  "id,title,content,tags,is_pinned,created_at,updated_at";
 
 function normalizeNoteTitle(title: string) {
   return title.trim().slice(0, 160);
@@ -22,6 +23,7 @@ function mapNote(note: Note): Note {
   return {
     ...note,
     tags: Array.isArray(note.tags) ? note.tags : null,
+    is_pinned: note.is_pinned === true,
   };
 }
 
@@ -74,7 +76,7 @@ export async function createNote(input: CreateNoteInput) {
 
   const { data, error } = await supabase
     .from("notes")
-    .insert({ title, content, tags })
+    .insert({ title, content, tags, is_pinned: false })
     .select(NOTE_COLUMNS)
     .single();
 
@@ -106,6 +108,10 @@ export async function updateNote(id: string, input: UpdateNoteInput) {
       Array.isArray(input.tags) && input.tags.length > 0
         ? input.tags.map((t) => t.trim()).filter(Boolean)
         : null;
+  }
+
+  if (typeof input.is_pinned === "boolean") {
+    updatePayload.is_pinned = input.is_pinned;
   }
 
   if (!Object.keys(updatePayload).length) {

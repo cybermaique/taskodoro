@@ -23,6 +23,14 @@ export interface TaskAttachment {
   created_at: string;
 }
 
+export interface TaskStatusHistory {
+  id: string;
+  task_id: string;
+  from_status: TaskStatus | null;
+  to_status: TaskStatus;
+  changed_at: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -35,6 +43,7 @@ export interface Task {
   updated_at: string;
   attachments: TaskAttachment[];
   subtasks: Subtask[];
+  status_history: TaskStatusHistory[];
 }
 
 export type TaskView = "all" | "work" | "personal" | "travel";
@@ -44,6 +53,7 @@ export interface CreateTaskInput {
   description?: string;
   priority?: TaskPriority;
   category?: string | null;
+  subtasks?: string[];
 }
 
 export interface UpdateTaskInput {

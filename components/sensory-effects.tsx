@@ -33,6 +33,7 @@ interface SensoryEffectsContextValue {
   soundEnabled: boolean;
   toggleSound: () => void;
   playSound: (effect: SoundEffect) => void;
+  unlockAudio: () => void;
 }
 
 interface ToneOptions {
@@ -146,10 +147,11 @@ function TypingEffectsRuntime({
       }
 
       const isTypingKey =
-        event.key.length === 1 ||
+        typeof event.key === "string" &&
+        (event.key.length === 1 ||
         event.key === "Backspace" ||
         event.key === "Delete" ||
-        event.key === "Enter";
+        event.key === "Enter");
       if (!isTypingKey) return;
 
       playSound("type");
@@ -339,13 +341,13 @@ export function SensoryEffectsProvider({ children }: { children: ReactNode }) {
           type: "triangle",
         });
       } else if (effect === "success" || effect === "login") {
-        [523.25, 659.25, 783.99].forEach((frequency, index) =>
+        [392, 523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) =>
           playTone({
             frequency,
-            duration: 0.16,
-            delay: index * 0.065,
-            volume: 0.025,
-            type: "sine",
+            duration: effect === "login" ? 0.2 : 0.16,
+            delay: index * (effect === "login" ? 0.075 : 0.065),
+            volume: effect === "login" ? 0.038 : 0.025,
+            type: index % 2 ? "triangle" : "sine",
           }),
         );
       } else if (effect === "error") {
@@ -393,13 +395,13 @@ export function SensoryEffectsProvider({ children }: { children: ReactNode }) {
             }),
         );
       } else if (effect === "logout") {
-        [659.25, 523.25, 392].forEach((frequency, index) =>
+        [783.99, 659.25, 523.25, 392].forEach((frequency, index) =>
           playTone({
             frequency,
-            duration: 0.16,
-            delay: index * 0.075,
-            volume: 0.022,
-            type: "sine",
+            duration: 0.19,
+            delay: index * 0.085,
+            volume: 0.032,
+            type: index === 3 ? "sine" : "triangle",
           }),
         );
       } else {
@@ -426,6 +428,10 @@ export function SensoryEffectsProvider({ children }: { children: ReactNode }) {
     [soundEnabled, synthesize],
   );
 
+  const unlockAudio = useCallback(() => {
+    if (soundEnabled) getAudioContext();
+  }, [getAudioContext, soundEnabled]);
+
   const toggleSound = useCallback(() => {
     const next = !soundEnabled;
     if (!next) synthesize("toggle");
@@ -434,8 +440,13 @@ export function SensoryEffectsProvider({ children }: { children: ReactNode }) {
   }, [soundEnabled, synthesize]);
 
   const contextValue = useMemo(
-    () => ({ soundEnabled, toggleSound, playSound }),
-    [playSound, soundEnabled, toggleSound],
+    () => ({
+      soundEnabled,
+      toggleSound,
+      playSound,
+      unlockAudio,
+    }),
+    [playSound, soundEnabled, toggleSound, unlockAudio],
   );
 
   return (
