@@ -33,6 +33,11 @@ function resetTilt(card: HTMLElement | null) {
   card.removeAttribute("data-tilting");
 }
 
+function releaseCard(card: HTMLElement | null) {
+  resetTilt(card);
+  card?.removeAttribute("data-action-hover");
+}
+
 export function AmbientEffects() {
   const layerRef = useRef<HTMLDivElement>(null);
   const activeCardRef = useRef<HTMLElement | null>(null);
@@ -48,13 +53,31 @@ export function AmbientEffects() {
 
       if (!supportsFinePointer || !(event.target instanceof Element)) return;
 
+      const actionTarget = event.target.closest<HTMLElement>(
+        "[data-task-action='true']",
+      );
+      if (actionTarget) {
+        const actionCard = actionTarget.closest<HTMLElement>("[data-tilt-card]");
+        if (activeCardRef.current !== actionCard) {
+          releaseCard(activeCardRef.current);
+          activeCardRef.current = actionCard;
+        }
+
+        if (actionCard) {
+          resetTilt(actionCard);
+          actionCard.setAttribute("data-action-hover", "true");
+        }
+        return;
+      }
+
       const nextCard = event.target.closest<HTMLElement>("[data-tilt-card]");
       if (activeCardRef.current !== nextCard) {
-        resetTilt(activeCardRef.current);
+        releaseCard(activeCardRef.current);
         activeCardRef.current = nextCard;
       }
 
       if (!nextCard) return;
+      nextCard.removeAttribute("data-action-hover");
       const rect = nextCard.getBoundingClientRect();
       const horizontal = (event.clientX - rect.left) / rect.width;
       const vertical = (event.clientY - rect.top) / rect.height;
@@ -67,7 +90,7 @@ export function AmbientEffects() {
     };
 
     const handlePointerLeave = () => {
-      resetTilt(activeCardRef.current);
+      releaseCard(activeCardRef.current);
       activeCardRef.current = null;
     };
 
@@ -98,7 +121,7 @@ export function AmbientEffects() {
     });
 
     return () => {
-      resetTilt(activeCardRef.current);
+      releaseCard(activeCardRef.current);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("blur", handlePointerLeave);
