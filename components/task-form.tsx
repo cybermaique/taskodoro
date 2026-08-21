@@ -239,7 +239,7 @@ export function TaskForm({
   return (
     <section
       className={[
-        "app-panel-enter app-compose-live dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20",
+        "app-panel-enter app-compose-live dashboard-reveal-panel mt-6 min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20",
         justCreated ? "task-form-success" : "",
       ].join(" ")}
     >
@@ -383,11 +383,6 @@ export function TaskForm({
                 onChange={handleDescriptionChange}
                 rows={3}
               />
-              <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
-                <ListChecks className="size-3" />
-                Use <code>/code</code> ou <code>/json</code> em uma nova linha;
-                links podem usar <code>Texto &gt; site.com</code>.
-              </p>
             </>
           ) : null}
         </div>
