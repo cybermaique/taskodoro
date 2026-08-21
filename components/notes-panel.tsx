@@ -1003,6 +1003,8 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createCloseConfirmationOpen, setCreateCloseConfirmationOpen] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -1264,12 +1266,8 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   };
 
   const handleCreateDialogChange = (open: boolean) => {
-    if (
-      !open &&
-      !submitting &&
-      (titleDraft.trim() || draft.trim()) &&
-      !window.confirm("Fechar e manter o rascunho da anotação para depois?")
-    ) {
+    if (!open && !submitting && (titleDraft.trim() || draft.trim())) {
+      setCreateCloseConfirmationOpen(true);
       return;
     }
 
@@ -1347,6 +1345,16 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={createCloseConfirmationOpen}
+        onOpenChange={setCreateCloseConfirmationOpen}
+        title="Fechar anotação?"
+        description="Há conteúdo no rascunho. Deseja fechar e manter a anotação para continuar depois?"
+        confirmLabel="Fechar e manter"
+        cancelLabel="Continuar editando"
+        onConfirm={() => setCreateDialogOpen(false)}
+      />
 
       {pinnedNotes.length > 0 && (
         <section className="app-pinned-live app-panel-enter dashboard-reveal-panel rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">

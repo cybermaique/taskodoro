@@ -14,6 +14,7 @@ import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,10 @@ interface DashboardProps {
 
 type DashboardTab = "tasks" | "notes";
 
+type PendingConfirmation =
+  | { kind: "switch-tab"; tab: DashboardTab }
+  | { kind: "close-task-create" };
+
 export function Dashboard({
   initialTasks,
   initialNotes,
@@ -81,6 +86,8 @@ export function Dashboard({
   );
   const [creatingTask, setCreatingTask] = useState(false);
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingConfirmation | null>(null);
   const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(
     null,
   );
@@ -472,11 +479,9 @@ export function Dashboard({
     const nextTab = value as DashboardTab;
     if (
       nextTab !== selectedTab &&
-      hasUnsavedTaskChanges &&
-      !window.confirm(
-        "Você tem alterações não salvas. Deseja continuar mesmo assim?",
-      )
+      hasUnsavedTaskChanges
     ) {
+      setPendingConfirmation({ kind: "switch-tab", tab: nextTab });
       return;
     }
 
@@ -484,17 +489,27 @@ export function Dashboard({
   };
 
   const handleTaskCreateDialogChange = (open: boolean) => {
-    if (
-      !open &&
-      hasUnsavedTaskForm &&
-      !window.confirm(
-        "Você tem uma tarefa em edição. Deseja fechar e descartar o rascunho?",
-      )
-    ) {
+    if (!open && hasUnsavedTaskForm) {
+      setPendingConfirmation({ kind: "close-task-create" });
       return;
     }
 
     setTaskCreateOpen(open);
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingConfirmation) return;
+
+    if (pendingConfirmation.kind === "switch-tab") {
+      setHasUnsavedTaskForm(false);
+      setHasUnsavedTaskEdit(false);
+      setSelectedTab(pendingConfirmation.tab);
+      if (taskCreateOpen) setTaskCreateOpen(false);
+      return;
+    }
+
+    setHasUnsavedTaskForm(false);
+    setTaskCreateOpen(false);
   };
 
   return (
@@ -650,6 +665,30 @@ export function Dashboard({
             />
           </DialogContent>
         </Dialog>
+
+        <ConfirmDialog
+          open={pendingConfirmation !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingConfirmation(null);
+          }}
+          title={
+            pendingConfirmation?.kind === "close-task-create"
+              ? "Fechar criação da tarefa?"
+              : "Alterações não salvas"
+          }
+          description={
+            pendingConfirmation?.kind === "close-task-create"
+              ? "Você tem uma tarefa em edição. Deseja fechar e descartar o rascunho?"
+              : "Você tem alterações não salvas nesta tarefa. Deseja sair mesmo assim e descartá-las?"
+          }
+          confirmLabel={
+            pendingConfirmation?.kind === "close-task-create"
+              ? "Descartar rascunho"
+              : "Sair sem salvar"
+          }
+          cancelLabel="Continuar editando"
+          onConfirm={confirmPendingAction}
+        />
 
       </div>
     </main>
