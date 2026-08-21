@@ -14,6 +14,14 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.task_status_history (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  from_status text check (from_status is null or from_status in ('not_started', 'in_progress', 'waiting', 'completed')),
+  to_status text not null check (to_status in ('not_started', 'in_progress', 'waiting', 'completed')),
+  changed_at timestamptz not null default now()
+);
+
 create table if not exists public.subtasks (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.tasks(id) on delete cascade,
@@ -55,6 +63,8 @@ create index if not exists idx_tasks_created_at_desc on public.tasks (created_at
 create index if not exists idx_tasks_status on public.tasks (status);
 create index if not exists idx_tasks_priority on public.tasks (priority);
 create index if not exists idx_tasks_category on public.tasks (category);
+create index if not exists idx_task_status_history_task_id_changed_at
+  on public.task_status_history (task_id, changed_at asc);
 create index if not exists idx_subtasks_task_id on public.subtasks (task_id);
 create index if not exists idx_task_attachments_task_id on public.task_attachments (task_id);
 
@@ -73,6 +83,31 @@ create trigger tasks_set_updated_at
 before update on public.tasks
 for each row
 execute function public.set_updated_at();
+
+create or replace function public.record_task_status_history()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.task_status_history (task_id, from_status, to_status, changed_at)
+    values (new.id, null, new.status, new.created_at);
+  elsif new.status is distinct from old.status then
+    insert into public.task_status_history (task_id, from_status, to_status)
+    values (new.id, old.status, new.status);
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists tasks_status_history on public.tasks;
+create trigger tasks_status_history
+after insert or update of status on public.tasks
+for each row
+execute function public.record_task_status_history();
 
 drop trigger if exists subtasks_set_updated_at on public.subtasks;
 create trigger subtasks_set_updated_at
@@ -108,6 +143,7 @@ alter table public.tasks enable row level security;
 alter table public.notes enable row level security;
 alter table public.subtasks enable row level security;
 alter table public.task_attachments enable row level security;
+alter table public.task_status_history enable row level security;
 
 drop policy if exists "Usuários acessam as próprias tarefas" on public.tasks;
 create policy "Usuários acessam as próprias tarefas" on public.tasks for all to authenticated
@@ -131,3 +167,8 @@ drop policy if exists "Usuários acessam arquivos próprios" on storage.objects;
 create policy "Usuários acessam arquivos próprios" on storage.objects for all to authenticated
 using (bucket_id = 'task-attachments' and exists (select 1 from public.tasks where tasks.id::text = (storage.foldername(name))[1] and tasks.user_id = auth.uid()))
 with check (bucket_id = 'task-attachments' and exists (select 1 from public.tasks where tasks.id::text = (storage.foldername(name))[1] and tasks.user_id = auth.uid()));
+
+drop policy if exists "task_status_history_user_access" on public.task_status_history;
+create policy "task_status_history_user_access" on public.task_status_history for all to authenticated
+using (exists (select 1 from public.tasks where tasks.id = task_status_history.task_id and tasks.user_id = auth.uid()))
+with check (exists (select 1 from public.tasks where tasks.id = task_status_history.task_id and tasks.user_id = auth.uid()));
