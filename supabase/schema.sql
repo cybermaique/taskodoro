@@ -121,11 +121,13 @@ create table if not exists public.notes (
   title text not null,
   content text not null,
   tags text[],
+  is_pinned boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_notes_created_at_desc on public.notes (created_at desc);
+create index if not exists idx_notes_pinned_created_at on public.notes (is_pinned, created_at desc);
 
 drop trigger if exists notes_set_updated_at on public.notes;
 create trigger notes_set_updated_at
@@ -134,6 +136,49 @@ for each row
 execute function public.set_updated_at();
 
 notify pgrst, 'reload schema';
+
+-- ── profiles ──────────────────────────────────────────────────────────────
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nickname text not null default 'Usuário',
+  avatar_url text,
+  accent_color text not null default 'teal'
+    check (accent_color in ('teal', 'cyan', 'blue', 'indigo', 'violet', 'fuchsia', 'rose', 'orange', 'amber', 'emerald')),
+  display_mode text not null default 'full'
+    check (display_mode in ('full', 'compact')),
+  task_column_widths jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists profiles_set_updated_at on public.profiles;
+create trigger profiles_set_updated_at
+before update on public.profiles
+for each row
+execute function public.set_updated_at();
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "Usuários acessam o próprio perfil" on public.profiles;
+create policy "Usuários acessam o próprio perfil" on public.profiles
+for all to authenticated
+using (id = auth.uid()) with check (id = auth.uid());
+
+insert into storage.buckets (id, name, public)
+values ('profile-avatars', 'profile-avatars', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Usuários gerenciam o próprio avatar" on storage.objects;
+create policy "Usuários gerenciam o próprio avatar" on storage.objects
+for all to authenticated
+using (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
 
 -- Authentication and per-user data isolation (Supabase Auth + RLS)
 alter table public.tasks add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();

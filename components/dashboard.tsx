@@ -10,15 +10,14 @@ import {
 } from "lucide-react";
 
 import { NotesPanel } from "@/components/notes-panel";
-import { SoundToggle } from "@/components/sensory-effects";
+import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import type { Note } from "@/types/note";
+import type { Profile, ProfileDisplayMode } from "@/types/profile";
 import type { Task, TaskPriority } from "@/types/task";
 
 const APP_TITLE = "Taskboard";
@@ -53,30 +52,37 @@ function upsertTask(tasks: Task[], nextTask: Task) {
 interface DashboardProps {
   initialTasks: Task[];
   initialNotes: Note[];
+  profile: Profile | null;
+  userEmail: string | null;
+  onProfileChange: (profile: Profile) => void;
+  onProfilePreferenceChange: (
+    updates: Partial<Pick<Profile, "display_mode" | "task_column_widths">>,
+  ) => Promise<void>;
 }
 
-type DisplayMode = "full" | "compact";
 type DashboardTab = "task-form" | "tasks" | "notes";
 
-export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
+export function Dashboard({
+  initialTasks,
+  initialNotes,
+  profile,
+  userEmail,
+  onProfileChange,
+  onProfilePreferenceChange,
+}: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>(() =>
     sortByMostRecent(initialTasks),
   );
   const [creatingTask, setCreatingTask] = useState(false);
+  const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(
+    null,
+  );
   const [hasUnsavedTaskForm, setHasUnsavedTaskForm] = useState(false);
   const [hasUnsavedTaskEdit, setHasUnsavedTaskEdit] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toast = useToast();
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
-    if (typeof window === "undefined") {
-      return "full";
-    }
-
-    return window.localStorage.getItem("taskboard_display_mode") === "compact"
-      ? "compact"
-      : "full";
-  });
+  const [displayMode, setDisplayMode] = useState<ProfileDisplayMode>("full");
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
     if (typeof window === "undefined") {
       return "tasks";
@@ -89,6 +95,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   });
   const isCompact = displayMode === "compact";
   const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
+  const greetedProfileIdRef = useRef<string | null>(null);
 
   const categorySuggestions = useMemo(() => {
     const fromTasks = tasks
@@ -99,8 +106,34 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   }, [tasks]);
 
   useEffect(() => {
-    window.localStorage.setItem("taskboard_display_mode", displayMode);
-  }, [displayMode]);
+    if (!profile) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setDisplayMode(profile.display_mode);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [profile]);
+
+  useEffect(() => {
+    const accent = profile?.accent_color ?? "teal";
+    document.documentElement.dataset.profileAccent = accent;
+
+    return () => {
+      document.documentElement.dataset.profileAccent = "teal";
+    };
+  }, [profile?.accent_color]);
+
+  useEffect(() => {
+    if (!profile || greetedProfileIdRef.current === profile.id) return;
+    greetedProfileIdRef.current = profile.id;
+
+    const greetingKey = `taskboard_greeting_seen:${profile.id}`;
+    if (window.sessionStorage.getItem(greetingKey) === "true") return;
+
+    window.sessionStorage.setItem(greetingKey, "true");
+    toast.success(`Bom te ver, ${profile.nickname}!`);
+  }, [profile, toast]);
 
   useEffect(() => {
     if (!hasUnsavedTaskChanges) return;
@@ -117,6 +150,16 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   useEffect(() => {
     window.localStorage.setItem("taskboard_selected_tab", selectedTab);
   }, [selectedTab]);
+
+  useEffect(() => {
+    if (!newlyCreatedTaskId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setNewlyCreatedTaskId(null);
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [newlyCreatedTaskId]);
 
   const dashboardStats = useMemo(() => {
     const notStarted = tasks.filter(
@@ -138,6 +181,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     priority?: TaskPriority;
     category?: string | null;
     attachments?: File[];
+    subtasks?: string[];
   }) => {
     setCreatingTask(true);
     setErrorMessage(null);
@@ -182,6 +226,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => upsertTask(current, createdTask));
+      setNewlyCreatedTaskId(createdTask.id);
+      setSelectedTab("tasks");
       toast.success("Tarefa criada com sucesso!");
     } finally {
       setCreatingTask(false);
@@ -248,11 +294,13 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
       setTasks((current) => current.filter((task) => task.id !== taskId));
       toast.success("Tarefa excluída!");
+      return true;
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Erro ao excluir tarefa.";
       setErrorMessage(msg);
       toast.error(msg);
+      return false;
     } finally {
       setBusyTaskId(null);
     }
@@ -429,22 +477,25 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
   return (
     <main className="app-dashboard-enter relative isolate min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
+      <div className="dashboard-boot-layer" aria-hidden="true">
+        <span className="dashboard-boot-orb dashboard-boot-orb-primary" />
+        <span className="dashboard-boot-orb dashboard-boot-orb-secondary" />
+        <span className="dashboard-boot-scan" />
+      </div>
       <div className="dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col gap-4 sm:gap-6">
         <header
           className={[
-            "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
+            "dashboard-reveal-header grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
             isCompact ? "gap-0 sm:gap-4" : "",
           ].join(" ")}
         >
-          <div className={isCompact ? "hidden" : "min-w-0 space-y-3"}>
-            {!isCompact ? (
-              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase leading-tight text-slate-600 shadow-sm sm:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white/60">
-                <ListTodo className="size-3.5" />
-                <span className="min-w-0">
-                  Organização pessoal e profissional
-                </span>
-              </div>
-            ) : null}
+          <div
+            className={
+              isCompact
+                ? "hidden"
+                : "dashboard-reveal-brand min-w-0 space-y-3"
+            }
+          >
             <div>
               {!isCompact ? (
                 <h1 className="break-words text-3xl font-semibold leading-none sm:text-4xl md:text-5xl">
@@ -462,9 +513,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
           <div
             className={[
-              isCompact
-                ? "flex w-full items-center justify-end gap-2 sm:hidden"
-                : "flex w-full flex-wrap items-center justify-between gap-2 justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
+              "dashboard-reveal-account flex w-full flex-wrap items-center justify-between gap-2 justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
             ].join(" ")}
           >
             {!isCompact ? (
@@ -481,28 +530,17 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 />
               </>
             ) : null}
-            <div className="flex shrink-0 rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
-              <Button
-                type="button"
-                size="sm"
-                variant={displayMode === "full" ? "default" : "ghost"}
-                className="h-11 rounded-full px-3 sm:h-8"
-                onClick={() => setDisplayMode("full")}
-              >
-                Completo
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={displayMode === "compact" ? "default" : "ghost"}
-                className="h-11 rounded-full px-3 sm:h-8"
-                onClick={() => setDisplayMode("compact")}
-              >
-                Compacto
-              </Button>
-            </div>
-            <SoundToggle />
-            <ThemeToggle />
+            <ProfileSettings
+              key={profile?.id ?? "profile-loading"}
+              profile={profile}
+              userEmail={userEmail}
+              onProfileChange={onProfileChange}
+              displayMode={displayMode}
+              onDisplayModeChange={(mode) => {
+                setDisplayMode(mode);
+                void onProfilePreferenceChange({ display_mode: mode });
+              }}
+            />
           </div>
         </header>
 
@@ -515,16 +553,16 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
         <Tabs
           value={selectedTab}
           onValueChange={handleTabChange}
-          className="min-w-0 gap-3 sm:gap-4"
+          className="dashboard-reveal-tabs min-w-0 gap-3 sm:gap-4"
         >
           <TabsList
-            className="app-tabs-bar sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
+            className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
             style={{ top: "max(0.5rem, var(--safe-area-top))" }}
           >
             <TabsTrigger
               value="task-form"
               aria-label="Nova tarefa"
-              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
             >
               <CircleDot className="size-4" />
               <span className="sm:hidden">Criar</span>
@@ -533,7 +571,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             <TabsTrigger
               value="tasks"
               aria-label="Tarefas"
-              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
             >
               <ListTodo className="size-4" />
               <span>Tarefas</span>
@@ -541,7 +579,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             <TabsTrigger
               value="notes"
               aria-label="Anotações"
-              className="h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
             >
               <StickyNote className="size-4" />
               <span className="sm:hidden">Notas</span>
@@ -549,7 +587,10 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="task-form" className="min-w-0">
+          <TabsContent
+            value="task-form"
+            className="dashboard-scene min-w-0"
+          >
             <TaskForm
               isSubmitting={creatingTask}
               isCompact={isCompact}
@@ -559,13 +600,18 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             />
           </TabsContent>
 
-          <TabsContent value="tasks" className="min-w-0">
+          <TabsContent value="tasks" className="dashboard-scene min-w-0">
             <section className="min-w-0">
               <div className={isCompact ? "space-y-0" : "space-y-5"}>
                 <TasksList
                   tasks={tasks}
+                  newlyCreatedTaskId={newlyCreatedTaskId}
                   busyTaskId={busyTaskId}
                   isCompact={isCompact}
+                  initialColumnWidths={profile?.task_column_widths ?? null}
+                  onColumnWidthsChange={(widths) =>
+                    onProfilePreferenceChange({ task_column_widths: widths })
+                  }
                   categorySuggestions={categorySuggestions}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
                   onDeleteTask={deleteTask}
@@ -580,37 +626,11 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
             </section>
           </TabsContent>
 
-          <TabsContent value="notes" className="min-w-0">
+          <TabsContent value="notes" className="dashboard-scene min-w-0">
             <NotesPanel initialNotes={initialNotes} />
           </TabsContent>
         </Tabs>
 
-        {isCompact ? (
-          <div className="mt-2 hidden items-center justify-end gap-2 sm:flex">
-            <div className="flex rounded-full border border-slate-900/10 bg-white/80 p-1 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-8 rounded-full px-3"
-                onClick={() => setDisplayMode("full")}
-              >
-                Completo
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="default"
-                className="h-8 rounded-full px-3"
-                onClick={() => setDisplayMode("compact")}
-              >
-                Compacto
-              </Button>
-            </div>
-            <SoundToggle />
-            <ThemeToggle />
-          </div>
-        ) : null}
       </div>
     </main>
   );
@@ -626,7 +646,7 @@ function StatPill({
   value: number;
 }) {
   return (
-    <div className="app-stat-pill hidden items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur sm:flex dark:border-white/10 dark:bg-white/10">
+    <div className="app-stat-pill app-stat-live hidden items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur sm:flex dark:border-white/10 dark:bg-white/10">
       <Icon className="size-4 text-teal-600 dark:text-teal-300" />
       <span className="text-slate-500 dark:text-white/55">{label}</span>
       <AnimatedNumber value={value} />
