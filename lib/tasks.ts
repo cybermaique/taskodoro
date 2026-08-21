@@ -62,15 +62,15 @@ function normalizePriority(value: string | undefined): TaskPriority {
 
 function normalizeStatus(value: string | undefined): TaskStatus {
   if (
+    value === "not_started" ||
     value === "in_progress" ||
     value === "completed" ||
-    value === "canceled" ||
-    value === "pending"
+    value === "waiting"
   ) {
     return value;
   }
 
-  return "pending";
+  return "not_started";
 }
 
 function mapTask(task: Task): Task {
@@ -200,7 +200,7 @@ export async function createTask(input: CreateTaskInput) {
   const payload = {
     title: input.title.trim(),
     description: normalizeNullableText(input.description),
-    status: "pending" as const,
+    status: "not_started" as const,
     priority: normalizePriority(input.priority),
     category: normalizeNullableText(input.category),
     completed_at: null,

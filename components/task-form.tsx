@@ -5,10 +5,12 @@ import {
   type DragEvent,
   type FormEvent,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
   ClipboardPaste,
+  CheckCircle2,
   Flag,
   Folder,
   Paperclip,
@@ -84,6 +86,8 @@ export function TaskForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
+  const successTimeoutRef = useRef<number | null>(null);
 
   const isDirty =
     values.title !== EMPTY_VALUES.title ||
@@ -96,6 +100,14 @@ export function TaskForm({
     onDirtyChange?.(isDirty);
     return () => onDirtyChange?.(false);
   }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current !== null) {
+        window.clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const addAttachments = (files: File[]) => {
     setAttachments((current) => [...current, ...files]);
@@ -137,6 +149,14 @@ export function TaskForm({
 
       setValues(EMPTY_VALUES);
       setAttachments([]);
+      setJustCreated(true);
+      if (successTimeoutRef.current !== null) {
+        window.clearTimeout(successTimeoutRef.current);
+      }
+      successTimeoutRef.current = window.setTimeout(() => {
+        setJustCreated(false);
+        successTimeoutRef.current = null;
+      }, 1500);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -147,7 +167,12 @@ export function TaskForm({
   };
 
   return (
-    <section className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20">
+    <section
+      className={[
+        "app-panel-enter min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20",
+        justCreated ? "task-form-success" : "",
+      ].join(" ")}
+    >
       <form
         onSubmit={onSubmit}
         onPaste={handlePaste}
@@ -177,15 +202,17 @@ export function TaskForm({
           </div>
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || justCreated}
             className="h-11 w-full touch-manipulation rounded-full px-4 sm:h-9 sm:w-auto"
           >
             {isSubmitting ? (
               <Loader2 className="size-4 animate-spin text-white" />
+            ) : justCreated ? (
+              <CheckCircle2 className="size-4" />
             ) : (
               <Plus className="size-4" />
             )}
-            {isSubmitting ? "Salvando…" : "Adicionar"}
+            {isSubmitting ? "Salvando…" : justCreated ? "Criada!" : "Adicionar"}
           </Button>
         </div>
 
@@ -195,7 +222,7 @@ export function TaskForm({
               {attachments.map((attachment, index) => (
                 <span
                   key={`${attachment.name}-${attachment.lastModified}-${index}`}
-                  className="flex items-center rounded-full border border-teal-500/30 bg-teal-500/10 pl-3 text-teal-700 dark:text-teal-200"
+                  className="app-chip-pop flex items-center rounded-full border border-teal-500/30 bg-teal-500/10 pl-3 text-teal-700 dark:text-teal-200"
                 >
                   Arquivo: {attachment.name || "arquivo"}
                   <Button

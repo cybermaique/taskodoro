@@ -44,7 +44,7 @@ export function ConfirmDialog({
         showCloseButton={false}
       >
         <DialogHeader className="items-center text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-full bg-rose-500/10 text-rose-500 dark:bg-rose-500/15">
+          <span className="app-danger-icon mx-auto grid size-12 place-items-center rounded-full bg-rose-500/10 text-rose-500 dark:bg-rose-500/15">
             <AlertTriangle className="size-6" />
           </span>
           <DialogTitle className="text-base font-semibold">

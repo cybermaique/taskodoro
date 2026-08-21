@@ -5,19 +5,19 @@ import {
   type DragEvent,
   type FormEvent,
   type Dispatch,
+  type PointerEvent as ReactPointerEvent,
   type SetStateAction,
+  Fragment,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
-  CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
   CirclePlus,
-  GripVertical,
   Pencil,
   Search,
   Trash2,
@@ -33,19 +33,24 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TaskDescription } from "@/components/task-description";
+import { TaskDropCelebration } from "@/components/task-drop-celebration";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   Task,
   TaskAttachment,
-  TaskFilter,
   TaskPriority,
   TaskView,
 } from "@/types/task";
@@ -56,7 +61,6 @@ interface TasksListProps {
   isCompact?: boolean;
   categorySuggestions: string[];
   onEditDirtyChange?: (isDirty: boolean) => void;
-  onToggleTask: (task: Task) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
   onUpdateTask: (
     taskId: string,
@@ -64,15 +68,14 @@ interface TasksListProps {
   ) => Promise<boolean>;
   onAddAttachment: (taskId: string, file: File) => Promise<void>;
   onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
-  onCreateSubtask: (taskId: string, title: string) => Promise<void>;
+  onCreateSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
 }
 
 type PriorityFilter = "all" | TaskPriority;
-type TaskSection = "active" | "completed";
+type TaskSection = Task["status"];
 
-const taskStatusStorageKey = "taskboard_task_status_filter";
 const taskViewStorageKey = "taskboard_task_view_filter";
 const taskPriorityStorageKey = "taskboard_task_priority_filter";
 const taskCategoryStorageKey = "taskboard_task_category_filter";
@@ -113,20 +116,66 @@ function getStatusLabel(status: Task["status"]) {
     return "Em andamento";
   }
 
+  if (status === "waiting") {
+    return "Aguardando";
+  }
+
   if (status === "completed") {
-    return "Concluída";
+    return "Finalizada";
   }
 
-  if (status === "canceled") {
-    return "Cancelada";
-  }
-
-  return "Pendente";
+  return "Não iniciada";
 }
 
-const taskSectionOrder: TaskSection[] = ["active", "completed"];
+const taskSectionOrder: TaskSection[] = [
+  "not_started",
+  "in_progress",
+  "waiting",
+  "completed",
+];
+
+const taskSectionStyles: Record<TaskSection, string> = {
+  not_started: "border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-white/70",
+  in_progress: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-200",
+  waiting: "border-amber-500/40 bg-amber-400/15 text-amber-800 dark:text-amber-200",
+  completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
+};
+
+const taskCardBorderStyles: Record<TaskSection, string> = {
+  not_started: "border-slate-400/25 dark:border-slate-400/20",
+  in_progress: "border-sky-500/30 dark:border-sky-400/25",
+  waiting: "border-amber-500/30 dark:border-amber-400/25",
+  completed: "border-emerald-500/25 dark:border-emerald-400/25",
+};
 
 const taskOrderStorageKey = "taskboard_task_order";
+const taskColumnWidthsStorageKey = "taskboard_task_column_widths";
+const minTaskColumnWidth = 208;
+const maxTaskColumnWidth = 704;
+
+type TaskColumnWidths = Record<TaskSection, number>;
+
+interface ColumnResizeState {
+  pointerId: number;
+  leftSection: TaskSection;
+  rightSection: TaskSection;
+  startX: number;
+  startLeftWidth: number;
+  startRightWidth: number;
+  startWidths: TaskColumnWidths;
+}
+
+interface DropPoint {
+  x: number;
+  y: number;
+}
+
+interface DropCelebration {
+  id: number;
+  taskId: string;
+  point: DropPoint;
+  variant: "move" | "complete";
+}
 
 function areEqualStringArrays(left: string[], right: string[]) {
   return (
@@ -167,13 +216,45 @@ function saveTaskOrder(order: string[]) {
   window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
 }
 
+function readStoredTaskColumnWidths(): TaskColumnWidths | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(taskColumnWidthsStorageKey);
+    const parsed = stored ? (JSON.parse(stored) as unknown) : null;
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !taskSectionOrder.every(
+        (section) =>
+          typeof (parsed as Record<string, unknown>)[section] === "number" &&
+          Number.isFinite((parsed as Record<string, number>)[section]) &&
+          (parsed as Record<string, number>)[section] > 0,
+      )
+    ) {
+      return null;
+    }
+
+    return parsed as TaskColumnWidths;
+  } catch {
+    window.localStorage.removeItem(taskColumnWidthsStorageKey);
+    return null;
+  }
+}
+
+function saveTaskColumnWidths(widths: TaskColumnWidths) {
+  window.localStorage.setItem(taskColumnWidthsStorageKey, JSON.stringify(widths));
+}
+
 export function TasksList({
   tasks,
   busyTaskId,
   isCompact = false,
   categorySuggestions,
   onEditDirtyChange,
-  onToggleTask,
   onDeleteTask,
   onUpdateTask,
   onAddAttachment,
@@ -182,7 +263,6 @@ export function TasksList({
   onToggleSubtask,
   onDeleteSubtask,
 }: TasksListProps) {
-  const [statusFilter, setStatusFilter] = useState<TaskFilter>("all");
   const [viewFilter, setViewFilter] = useState<TaskView>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -197,7 +277,15 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
-  const [completedTasksExpanded, setCompletedTasksExpanded] = useState(false);
+  const [dropCelebration, setDropCelebration] =
+    useState<DropCelebration | null>(null);
+  const [taskColumnWidths, setTaskColumnWidths] =
+    useState<TaskColumnWidths | null>(null);
+  const [canResizeColumns, setCanResizeColumns] = useState(false);
+  const [resizingDividerIndex, setResizingDividerIndex] = useState<number | null>(
+    null,
+  );
+  const [detailsTaskId, setDetailsTaskId] = useState<string | null>(null);
   const [attachmentViewer, setAttachmentViewer] = useState<{
     task: Task;
     index: number;
@@ -211,20 +299,21 @@ export function TasksList({
     title: string;
   } | null>(null);
   const [deletingConfirm, setDeletingConfirm] = useState(false);
+  const columnRefs = useRef<Partial<Record<TaskSection, HTMLElement | null>>>({});
+  const resizeStateRef = useRef<ColumnResizeState | null>(null);
+  const dropCelebrationTimeoutRef = useRef<number | null>(null);
+  const dropCelebrationSequenceRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (dropCelebrationTimeoutRef.current !== null) {
+        window.clearTimeout(dropCelebrationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      // Load status filter
-      const storedStatus = window.localStorage.getItem(taskStatusStorageKey);
-      if (
-        storedStatus === "all" ||
-        storedStatus === "pending" ||
-        storedStatus === "in_progress" ||
-        storedStatus === "canceled"
-      ) {
-        setStatusFilter(storedStatus as TaskFilter);
-      }
-
       // Load view filter
       const storedView = window.localStorage.getItem(taskViewStorageKey);
       const isValidTaskView =
@@ -266,11 +355,6 @@ export function TasksList({
 
   useEffect(() => {
     if (!hasLoadedFilters) return;
-    window.localStorage.setItem(taskStatusStorageKey, statusFilter);
-  }, [statusFilter, hasLoadedFilters]);
-
-  useEffect(() => {
-    if (!hasLoadedFilters) return;
     window.localStorage.setItem(taskViewStorageKey, viewFilter);
   }, [viewFilter, hasLoadedFilters]);
 
@@ -292,6 +376,30 @@ export function TasksList({
 
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncResizableLayout = () => setCanResizeColumns(mediaQuery.matches);
+
+    syncResizableLayout();
+    mediaQuery.addEventListener("change", syncResizableLayout);
+
+    return () => mediaQuery.removeEventListener("change", syncResizableLayout);
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setTaskColumnWidths(readStoredTaskColumnWidths());
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    if (taskColumnWidths) {
+      saveTaskColumnWidths(taskColumnWidths);
+    }
+  }, [taskColumnWidths]);
 
   const normalizedTaskOrder = useMemo(
     () => normalizeTaskOrder(taskOrder, tasks),
@@ -340,10 +448,6 @@ export function TasksList({
 
   const filteredTasks = useMemo(() => {
     return orderedTasks.filter((task) => {
-      if (statusFilter !== "all" && task.status !== statusFilter) {
-        return false;
-      }
-
       if (viewFilter === "work" && task.category !== "trabalho") {
         return false;
       }
@@ -388,36 +492,30 @@ export function TasksList({
     orderedTasks,
     priorityFilter,
     search,
-    statusFilter,
     viewFilter,
   ]);
 
   const groupedTasks = useMemo(() => {
     const groups: Record<TaskSection, Task[]> = {
-      active: [],
+      not_started: [],
+      in_progress: [],
+      waiting: [],
       completed: [],
     };
 
     for (const task of filteredTasks) {
-      if (task.status === "completed") {
-        groups.completed.push(task);
-      } else {
-        groups.active.push(task);
-      }
+      groups[task.status].push(task);
     }
-
-    groups.completed.sort(
-      (left, right) =>
-        new Date(right.completed_at ?? right.updated_at).getTime() -
-        new Date(left.completed_at ?? left.updated_at).getTime(),
-    );
 
     return groups;
   }, [filteredTasks]);
 
-  const visibleTaskCount = filteredTasks.length - groupedTasks.completed.length;
+  const visibleTaskCount = filteredTasks.length;
+  const detailsTask =
+    tasks.find((task) => task.id === detailsTaskId) ?? null;
 
   const startEdit = (task: Task) => {
+    setDetailsTaskId(task.id);
     setEditingTaskId(task.id);
     setEditingState({
       title: task.title,
@@ -440,7 +538,8 @@ export function TasksList({
       return;
     }
 
-    await onCreateSubtask(taskId, title);
+    const wasCreated = await onCreateSubtask(taskId, title);
+    if (!wasCreated) return;
     setSubtaskDraftByTaskId((current) => ({ ...current, [taskId]: "" }));
   };
 
@@ -497,6 +596,35 @@ export function TasksList({
     setDragOverTaskId(null);
   };
 
+  const celebrateDrop = (
+    taskId: string,
+    point: DropPoint,
+    variant: DropCelebration["variant"],
+  ) => {
+    if (dropCelebrationTimeoutRef.current !== null) {
+      window.clearTimeout(dropCelebrationTimeoutRef.current);
+    }
+
+    dropCelebrationSequenceRef.current += 1;
+    const celebrationId = dropCelebrationSequenceRef.current;
+    setDropCelebration({ id: celebrationId, taskId, point, variant });
+    dropCelebrationTimeoutRef.current = window.setTimeout(() => {
+      setDropCelebration((current) =>
+        current?.id === celebrationId ? null : current,
+      );
+      dropCelebrationTimeoutRef.current = null;
+    }, 2800);
+  };
+
+  const getDropPoint = (event: DragEvent<HTMLElement>): DropPoint => {
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    return {
+      x: event.clientX || rect.left + rect.width / 2,
+      y: event.clientY || rect.top + rect.height / 2,
+    };
+  };
+
   const handleDragOver = (event: DragEvent, taskId?: string) => {
     event.preventDefault();
     event.stopPropagation();
@@ -504,31 +632,141 @@ export function TasksList({
     setDragOverTaskId(taskId ?? null);
   };
 
-  const handleDropOnTask = (
+  const handleDropOnTask = async (
     event: DragEvent<HTMLLIElement>,
     targetTaskId: string,
   ) => {
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+    const dropPoint = getDropPoint(event);
+    handleDragEnd();
 
     if (taskId) {
+      const taskToMove = tasks.find((task) => task.id === taskId);
+      const targetTask = tasks.find((task) => task.id === targetTaskId);
+      if (taskToMove && targetTask && taskToMove.status !== targetTask.status) {
+        const wasUpdated = await onUpdateTask(taskId, {
+          status: targetTask.status,
+        });
+        if (!wasUpdated) return;
+      }
       moveTaskBefore(taskId, targetTaskId);
+      celebrateDrop(
+        taskId,
+        dropPoint,
+        taskToMove?.status !== "completed" &&
+          targetTask?.status === "completed"
+          ? "complete"
+          : "move",
+      );
     }
-
-    handleDragEnd();
   };
 
-  const handleDropOnList = (event: DragEvent<HTMLUListElement>) => {
+  const handleDropOnColumn = async (
+    event: DragEvent<HTMLUListElement>,
+    status: TaskSection,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+    const dropPoint = getDropPoint(event);
+    handleDragEnd();
 
     if (taskId) {
+      const taskToMove = tasks.find((task) => task.id === taskId);
+      if (taskToMove && taskToMove.status !== status) {
+        const wasUpdated = await onUpdateTask(taskId, { status });
+        if (!wasUpdated) return;
+      }
       moveTaskToEnd(taskId);
+      celebrateDrop(
+        taskId,
+        dropPoint,
+        taskToMove?.status !== "completed" && status === "completed"
+          ? "complete"
+          : "move",
+      );
+    }
+  };
+
+  const startColumnResize = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    dividerIndex: number,
+  ) => {
+    if (!canResizeColumns || event.button !== 0) {
+      return;
     }
 
-    handleDragEnd();
+    const leftSection = taskSectionOrder[dividerIndex];
+    const rightSection = taskSectionOrder[dividerIndex + 1];
+    const widths = taskSectionOrder.reduce<Partial<TaskColumnWidths>>(
+      (current, section) => {
+        const column = columnRefs.current[section];
+        if (column) current[section] = column.getBoundingClientRect().width;
+        return current;
+      },
+      {},
+    );
+
+    if (
+      !leftSection ||
+      !rightSection ||
+      !taskSectionOrder.every((section) => typeof widths[section] === "number")
+    ) {
+      return;
+    }
+
+    const measuredWidths = widths as TaskColumnWidths;
+    resizeStateRef.current = {
+      pointerId: event.pointerId,
+      leftSection,
+      rightSection,
+      startX: event.clientX,
+      startLeftWidth: measuredWidths[leftSection],
+      startRightWidth: measuredWidths[rightSection],
+      startWidths: measuredWidths,
+    };
+    setTaskColumnWidths(measuredWidths);
+    setResizingDividerIndex(dividerIndex);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const resizeColumns = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resizeState = resizeStateRef.current;
+    if (!resizeState || resizeState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const minDelta = Math.max(
+      minTaskColumnWidth - resizeState.startLeftWidth,
+      resizeState.startRightWidth - maxTaskColumnWidth,
+    );
+    const maxDelta = Math.min(
+      maxTaskColumnWidth - resizeState.startLeftWidth,
+      resizeState.startRightWidth - minTaskColumnWidth,
+    );
+    const requestedDelta = event.clientX - resizeState.startX;
+    const delta = Math.min(Math.max(requestedDelta, minDelta), maxDelta);
+
+    setTaskColumnWidths({
+      ...resizeState.startWidths,
+      [resizeState.leftSection]: resizeState.startLeftWidth + delta,
+      [resizeState.rightSection]: resizeState.startRightWidth - delta,
+    });
+  };
+
+  const stopColumnResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeStateRef.current?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    resizeStateRef.current = null;
+    setResizingDividerIndex(null);
   };
 
   return (
@@ -538,47 +776,9 @@ export function TasksList({
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">Tarefas</h2>
             <p className="text-sm text-slate-500 dark:text-white/45">
-              {visibleTaskCount} visíveis
-              {groupedTasks.completed.length > 0
-                ? ` · ${groupedTasks.completed.length} concluídas ocultas`
-                : ""}
+              {visibleTaskCount} no quadro
             </p>
           </div>
-
-          {!isCompact ? (
-            <Tabs
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value as TaskFilter)}
-              className="w-full min-w-0 touch-pan-x overflow-x-auto pb-1 [scrollbar-width:none] md:w-auto md:pb-0 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-            >
-              <TabsList className="grid w-[30rem] min-w-[30rem] grid-cols-4 rounded-full bg-slate-950/[0.06] p-1 group-data-horizontal/tabs:h-12 md:group-data-horizontal/tabs:h-8 dark:bg-white/10">
-                <TabsTrigger
-                  value="all"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Todas
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pending"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Pendentes
-                </TabsTrigger>
-                <TabsTrigger
-                  value="in_progress"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Andamento
-                </TabsTrigger>
-                <TabsTrigger
-                  value="canceled"
-                  className="min-h-10 touch-manipulation rounded-full px-3 md:min-h-0"
-                >
-                  Canceladas
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          ) : null}
         </div>
 
         <div className="mt-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -675,80 +875,54 @@ export function TasksList({
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {taskSectionOrder.map((section) => {
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0">
+          {taskSectionOrder.map((section, index) => {
             const tasksByBucket = groupedTasks[section];
-            const isCompletedSection = section === "completed";
-
-            if (!tasksByBucket.length) {
-              return null;
-            }
 
             return (
-              <section key={section} className="min-w-0 space-y-3">
-                {isCompletedSection ? (
-                  <button
-                    type="button"
-                    className="flex min-h-16 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
-                    aria-expanded={completedTasksExpanded}
-                    aria-controls="completed-tasks-list"
-                    onClick={() =>
-                      setCompletedTasksExpanded((expanded) => !expanded)
-                    }
+              <Fragment key={section}>
+                <section
+                  ref={(element) => {
+                    columnRefs.current[section] = element;
+                  }}
+                  style={
+                    canResizeColumns && taskColumnWidths
+                      ? {
+                          flexBasis: 0,
+                          flexGrow: taskColumnWidths[section],
+                        }
+                      : undefined
+                  }
+                  className="flex min-w-0 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1"
+                >
+                <div className="mb-3 flex items-center gap-2 px-1">
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${taskSectionStyles[section]}`}
                   >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                      <CheckCircle2 className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">Concluídas</span>
-                      <span className="block text-xs text-slate-500 dark:text-white/45">
-                        {tasksByBucket.length}{" "}
-                        {tasksByBucket.length === 1
-                          ? "tarefa oculta"
-                          : "tarefas ocultas"}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={[
-                        "size-5 shrink-0 text-slate-500 transition-transform duration-200 dark:text-white/50",
-                        completedTasksExpanded ? "rotate-180" : "",
-                      ].join(" ")}
-                    />
-                  </button>
-                ) : (
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="h-7 rounded-full border border-teal-500 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-700 dark:text-teal-200"
-                    >
-                      Tarefas ativas
-                    </span>
-                    <div className="h-px flex-1 bg-slate-900/10 dark:bg-white/10" />
-                    <span className="text-xs text-slate-500 dark:text-white/45">
-                      {tasksByBucket.length}
-                    </span>
-                  </div>
-                )}
+                    {getStatusLabel(section)}
+                  </span>
+                  <span className="ml-auto text-xs text-slate-500 dark:text-white/45">
+                    {tasksByBucket.length}
+                  </span>
+                </div>
 
-                {!isCompletedSection || completedTasksExpanded ? (
-                  <ul
-                    id={isCompletedSection ? "completed-tasks-list" : undefined}
-                    className="min-w-0 space-y-3"
-                    onDragOver={
-                      isCompletedSection
-                        ? undefined
-                        : (event) => handleDragOver(event)
-                    }
-                    onDrop={
-                      isCompletedSection
-                        ? undefined
-                        : handleDropOnList
-                    }
-                  >
+                <ul
+                  className="min-h-24 space-y-3"
+                  onDragOver={(event) => handleDragOver(event)}
+                  onDrop={(event) => handleDropOnColumn(event, section)}
+                >
+                  {tasksByBucket.length === 0 ? (
+                    <li className="rounded-2xl border border-dashed border-slate-900/15 px-3 py-5 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40">
+                      Arraste uma tarefa para cá
+                    </li>
+                  ) : null}
                     {tasksByBucket.map((task) => {
                       const isCompleted = task.status === "completed";
                       const isBusy = busyTaskId === task.id;
                       const isEditing =
-                        editingTaskId === task.id && editingState;
+                        editingTaskId === task.id &&
+                        editingState &&
+                        detailsTaskId !== task.id;
 
                       const completedSubtasks = task.subtasks.filter(
                         (item) => item.is_completed,
@@ -759,61 +933,65 @@ export function TasksList({
                             (completedSubtasks / task.subtasks.length) * 100,
                           )
                         : 0;
-                      const shouldSuggestComplete =
-                        task.status !== "completed" &&
-                        task.status !== "canceled" &&
-                        hasSubtasks &&
-                        completedSubtasks === task.subtasks.length;
-
                       return (
                         <li
                           key={task.id}
+                          data-tilt-card
+                          draggable={!isEditing}
+                          onDragStart={(event) =>
+                            handleDragStart(event, task.id)
+                          }
+                          onDragEnd={handleDragEnd}
+                          onClick={(event) => {
+                            const target = event.target;
+                            if (
+                              target instanceof Element &&
+                              target.closest("button, input, textarea, [role=combobox]")
+                            ) {
+                              return;
+                            }
+                            setDetailsTaskId(task.id);
+                          }}
                           onDragOver={(event) => handleDragOver(event, task.id)}
                           onDrop={(event) => handleDropOnTask(event, task.id)}
                           className={[
-                            "group min-w-0 border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                            "app-list-item-enter group flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                             draggingTaskId === task.id
-                              ? "scale-[0.99] opacity-55"
+                              ? "task-card-dragging z-20 opacity-70"
                               : "",
                             dragOverTaskId === task.id &&
                             draggingTaskId !== task.id
-                              ? "ring-2 ring-teal-400/60"
+                              ? "task-card-drop-target z-10 ring-2 ring-teal-400/70"
                               : "",
+                            dropCelebration?.taskId === task.id
+                              ? "task-card-drop-celebration z-20"
+                              : "",
+                            isEditing
+                              ? "h-auto overflow-visible"
+                              : isCompleted
+                                ? "h-auto min-h-0 overflow-visible"
+                                : "min-h-32 overflow-hidden",
                             isCompact
                               ? "rounded-2xl p-2.5"
                               : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
-                            isCompleted
-                              ? "border-emerald-500/25"
-                              : "border-slate-900/10 dark:border-white/10",
+                            taskCardBorderStyles[task.status],
                           ].join(" ")}
                         >
-                          <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 md:grid-cols-[auto_auto_minmax(0,1fr)_auto] md:gap-4">
+                          {isCompleted ? (
                             <button
                               type="button"
-                              draggable={!isEditing && !isCompleted}
-                              onDragStart={(event) =>
-                                handleDragStart(event, task.id)
-                              }
-                              onDragEnd={handleDragEnd}
-                              className="col-start-1 row-start-2 inline-flex size-11 touch-manipulation self-center cursor-grab items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-600 active:cursor-grabbing md:col-start-1 md:row-start-1 md:size-8 dark:hover:bg-white/10 dark:hover:text-white/70"
-                              aria-label="Arrastar tarefa"
-                              aria-grabbed={draggingTaskId === task.id}
-                              title="Arrastar tarefa"
+                              onClick={() => setDetailsTaskId(task.id)}
+                              className="line-clamp-2 w-full text-left text-sm font-semibold leading-snug text-slate-500 dark:text-white/55"
+                              aria-label={`Abrir tarefa finalizada: ${task.title}`}
                             >
-                              <GripVertical className="size-4" />
+                              {task.title}
                             </button>
-
-                            <Checkbox
-                              checked={isCompleted}
-                              onCheckedChange={() => onToggleTask(task)}
-                              disabled={isBusy}
-                              aria-label="Concluir tarefa"
-                              className="col-start-2 row-start-2 size-5 self-center after:-inset-3 md:col-start-2 md:row-start-1 md:mt-1 md:size-4 md:self-start md:after:-inset-x-3 md:after:-inset-y-2"
-                            />
-
+                          ) : (
+                          <div className="flex min-w-0 flex-1 flex-col gap-3">
+                            <div className="flex min-w-0 items-start">
                             <div
                               className={[
-                                "col-span-3 col-start-1 row-start-1 min-w-0 md:col-span-1 md:col-start-3 md:row-start-1",
+                                "min-w-0 flex-1",
                                 isCompact ? "space-y-2" : "space-y-3",
                               ].join(" ")}
                             >
@@ -864,65 +1042,33 @@ export function TasksList({
                                 <>
                                   <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                      <p
+                                      <button
+                                        type="button"
+                                        onClick={() => setDetailsTaskId(task.id)}
+                                        aria-haspopup="dialog"
                                         className={[
+                                          "line-clamp-2 w-full cursor-pointer text-left",
                                           isCompact
-                                            ? "break-words text-base font-semibold leading-snug [overflow-wrap:anywhere]"
-                                            : "break-words text-lg font-semibold leading-snug [overflow-wrap:anywhere]",
+                                            ? "break-words text-base font-semibold leading-snug"
+                                            : "break-words text-lg font-semibold leading-snug",
                                           isCompleted
                                             ? "text-slate-400 line-through dark:text-white/35"
                                             : "",
                                         ].join(" ")}
                                       >
                                         {task.title}
-                                      </p>
-                                      {!isCompact && task.description ? (
-                                        <p className="mt-1 break-words text-sm text-slate-500 [overflow-wrap:anywhere] dark:text-white/45">
-                                          {task.description}
+                                      </button>
+                                      {task.description ? (
+                                        <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
+                                          <TaskDescription>
+                                            {task.description}
+                                          </TaskDescription>
                                         </p>
-                                      ) : null}
-                                      {task.attachments.length ? (
-                                        <div className="mt-3 flex flex-wrap gap-2">
-                                          {sortAttachments(
-                                            task.attachments,
-                                          ).map((attachment, index) => (
-                                            <button
-                                              key={attachment.id}
-                                              type="button"
-                                              onClick={() =>
-                                                setAttachmentViewer({
-                                                  task: {
-                                                    ...task,
-                                                    attachments:
-                                                      sortAttachments(
-                                                        task.attachments,
-                                                      ),
-                                                  },
-                                                  index,
-                                                })
-                                              }
-                                              className="group/image overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10"
-                                              title={`Abrir ${attachment.file_name}`}
-                                            >
-                                              <AttachmentPreview
-                                                attachment={attachment}
-                                                taskId={task.id}
-                                              />
-                                            </button>
-                                          ))}
-                                        </div>
                                       ) : null}
                                     </div>
                                   </div>
 
                                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                    <Badge
-                                      variant={
-                                        isCompleted ? "secondary" : "default"
-                                      }
-                                    >
-                                      {getStatusLabel(task.status)}
-                                    </Badge>
                                     <Badge
                                       className={getPriorityClass(
                                         task.priority,
@@ -952,7 +1098,7 @@ export function TasksList({
                                 </>
                               )}
 
-                              {isCompact && hasSubtasks ? (
+                              {hasSubtasks ? (
                                 <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
                                   <span>
                                     Subtarefas {completedSubtasks}/
@@ -960,256 +1106,137 @@ export function TasksList({
                                   </span>
                                   <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
                                     <div
-                                      className="h-full rounded-full bg-teal-500"
+                                      className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
                                       style={{ width: `${subtaskPercent}%` }}
                                     />
                                   </div>
-                                  {shouldSuggestComplete ? (
-                                    <Button
-                                      size="sm"
-                                      className="h-11 touch-manipulation rounded-full bg-emerald-500 px-4 text-xs text-white md:h-7 md:px-3 hover:bg-emerald-600"
-                                      onClick={async () => {
-                                        await onUpdateTask(task.id, {
-                                          status: "completed",
-                                        });
-                                      }}
-                                    >
-                                      Concluir
-                                    </Button>
-                                  ) : null}
+                                  <span className="min-w-0 max-w-full truncate">
+                                    {task.subtasks.find(
+                                      (subtask) => !subtask.is_completed,
+                                    )?.title ?? "Todas concluídas"}
+                                  </span>
                                 </div>
                               ) : null}
 
-                              <div
-                                className={[
-                                  "space-y-3 rounded-2xl bg-slate-950/[0.035] p-3 dark:bg-white/[0.045]",
-                                  isCompact ? "hidden" : "",
-                                ].join(" ")}
-                              >
-                                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/45">
-                                      Subtarefas {completedSubtasks}/
-                                      {task.subtasks.length}
-                                    </p>
-                                    {hasSubtasks ? (
-                                      <div className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-slate-900/10 sm:w-24 sm:flex-none dark:bg-white/10">
-                                        <div
-                                          className="h-full rounded-full bg-teal-500"
-                                          style={{
-                                            width: `${subtaskPercent}%`,
-                                          }}
-                                        />
-                                      </div>
-                                    ) : null}
-                                  </div>
-
-                                  {shouldSuggestComplete ? (
-                                    <Button
-                                      size="sm"
-                                      className="h-11 touch-manipulation rounded-full bg-emerald-500 px-4 text-white md:h-7 md:px-2.5 hover:bg-emerald-600"
-                                      onClick={async () => {
-                                        await onUpdateTask(task.id, {
-                                          status: "completed",
-                                        });
-                                      }}
-                                    >
-                                      <CheckCircle2 className="size-4" />
-                                      Concluir tarefa
-                                    </Button>
-                                  ) : null}
-                                </div>
-
-                                {task.subtasks.length ? (
-                                  <ul className="space-y-2">
-                                    {task.subtasks.map((subtask) => (
-                                      <li
-                                        key={subtask.id}
-                                        className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-white/70 px-2 py-1.5 dark:bg-black/20"
-                                      >
-                                        <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
-                                          <Checkbox
-                                            checked={subtask.is_completed}
-                                            onCheckedChange={() =>
-                                              onToggleSubtask(
-                                                subtask.id,
-                                                !subtask.is_completed,
-                                              )
-                                            }
-                                            className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
-                                          />
-                                          <span
-                                            className={[
-                                              "truncate text-sm",
-                                              subtask.is_completed
-                                                ? "text-slate-400 line-through dark:text-white/35"
-                                                : "",
-                                            ].join(" ")}
-                                          >
-                                            {subtask.title}
-                                          </span>
-                                        </label>
-
-                                        <Button
-                                          type="button"
-                                          size="icon-sm"
-                                          variant="ghost"
-                                          className="size-11 touch-manipulation md:size-7"
-                                          onClick={() =>
-                                            setConfirmDeleteSubtask({
-                                              id: subtask.id,
-                                              title: subtask.title,
-                                            })
-                                          }
-                                          aria-label="Excluir subtarefa"
-                                        >
-                                          <Trash2 className="size-4 text-rose-500" />
-                                        </Button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-white/40">
-                                    <Circle className="size-3" />
-                                    Sem subtarefas ainda.
-                                  </p>
-                                )}
-
-                                <form
-                                  onSubmit={(event) =>
-                                    submitSubtask(event, task.id)
-                                  }
-                                  className="flex min-w-0 flex-col gap-2 sm:flex-row"
-                                >
-                                  <Input
-                                    className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
-                                    value={subtaskDraftByTaskId[task.id] ?? ""}
-                                    onChange={(event) =>
-                                      setSubtaskDraftByTaskId((current) => ({
-                                        ...current,
-                                        [task.id]: event.target.value,
-                                      }))
-                                    }
-                                    placeholder="Nova subtarefa"
-                                    maxLength={160}
-                                  />
-                                  <Button
-                                    type="submit"
-                                    variant="outline"
-                                    className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
-                                  >
-                                    <CirclePlus className="size-4" />
-                                    Adicionar
-                                  </Button>
-                                </form>
-                              </div>
+                            </div>
                             </div>
 
-                            <div
-                              className={[
-                                "gap-2 md:gap-1.5",
-                                isCompact
-                                  ? "col-start-3 row-start-2 flex flex-wrap items-center justify-end md:col-start-4 md:row-start-1 md:flex-row"
-                                  : "col-span-3 col-start-1 row-start-3 grid grid-cols-2 self-stretch [&>button]:w-full md:col-span-1 md:col-start-4 md:row-start-1 md:flex md:self-center md:items-center md:justify-end md:[&>button]:w-auto md:flex-col",
-                              ].join(" ")}
-                            >
-                              <Button
-                                type="button"
-                                size={isCompact ? "icon-sm" : "icon"}
-                                variant="ghost"
-                                className={
-                                  isCompact
-                                    ? "size-11 touch-manipulation md:size-7"
-                                    : "size-11 touch-manipulation md:size-8"
-                                }
-                                onClick={() => startEdit(task)}
-                                disabled={Boolean(isEditing)}
-                                aria-label="Editar tarefa"
-                              >
-                                <Pencil className="size-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size={isCompact ? "icon-sm" : "icon"}
-                                variant="ghost"
-                                className={
-                                  isCompact
-                                    ? "size-11 touch-manipulation md:size-7"
-                                    : "size-11 touch-manipulation md:size-8"
-                                }
-                                onClick={() =>
-                                  setConfirmDeleteTask({
-                                    id: task.id,
-                                    title: task.title,
-                                  })
-                                }
-                                disabled={isBusy}
-                                aria-label="Excluir tarefa"
-                              >
-                                <Trash2 className="size-4 text-rose-500" />
-                              </Button>
-                              {!isCompact &&
-                              task.status !== "completed" &&
-                              task.status !== "canceled" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, {
-                                      status: "in_progress",
-                                    })
-                                  }
-                                >
-                                  Andamento
-                                </Button>
-                              ) : null}
-                              {!isCompact && task.status === "canceled" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, { status: "pending" })
-                                  }
-                                >
-                                  Reabrir
-                                </Button>
-                              ) : !isCompact && task.status !== "completed" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-11 touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
-                                  onClick={() =>
-                                    onUpdateTask(task.id, {
-                                      status: "canceled",
-                                    })
-                                  }
-                                >
-                                  Cancelar
-                                </Button>
-                              ) : null}
-                            </div>
                           </div>
+                          )}
                         </li>
                       );
                     })}
                   </ul>
+                </section>
+                {index < taskSectionOrder.length - 1 ? (
+                  <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label={`Redimensionar colunas ${getStatusLabel(section)} e ${getStatusLabel(taskSectionOrder[index + 1])}`}
+                    title="Arraste para redimensionar as colunas"
+                    className={`group relative hidden w-4 shrink-0 touch-none cursor-col-resize items-center justify-center lg:flex ${resizingDividerIndex === index ? "bg-teal-500/10" : ""}`}
+                    onPointerDown={(event) => startColumnResize(event, index)}
+                    onPointerMove={resizeColumns}
+                    onPointerUp={stopColumnResize}
+                    onPointerCancel={stopColumnResize}
+                  >
+                    <span
+                      className={`h-14 w-1 rounded-full transition-colors ${resizingDividerIndex === index ? "bg-teal-400" : "bg-slate-900/15 group-hover:bg-teal-400/70 dark:bg-white/15"}`}
+                    />
+                  </div>
                 ) : null}
-              </section>
+              </Fragment>
             );
           })}
         </div>
       )}
+
+      {dropCelebration ? (
+        <TaskDropCelebration
+          key={dropCelebration.id}
+          x={dropCelebration.point.x}
+          y={dropCelebration.point.y}
+          variant={dropCelebration.variant}
+        />
+      ) : null}
 
       <datalist id="category-suggestions-edit">
         {availableCategories.map((category) => (
           <option key={category} value={category} />
         ))}
       </datalist>
+
+      <TaskDetailsDialog
+        task={detailsTask}
+        busy={detailsTask ? busyTaskId === detailsTask.id : false}
+        subtaskDraft={detailsTask ? subtaskDraftByTaskId[detailsTask.id] ?? "" : ""}
+        isEditing={Boolean(
+          detailsTask && editingTaskId === detailsTask.id && editingState,
+        )}
+        editingState={editingState}
+        setEditingState={setEditingState}
+        onClose={() => {
+          cancelEdit();
+          setDetailsTaskId(null);
+        }}
+        onEdit={() => {
+          if (!detailsTask) return;
+          startEdit(detailsTask);
+        }}
+        onCancelEdit={cancelEdit}
+        onSaveEdit={async ({ attachments, attachmentIdsToDelete }) => {
+          if (!detailsTask || !editingState) return;
+          const nextTitle = editingState.title.trim();
+
+          if (!nextTitle) return;
+
+          const taskWasUpdated = await onUpdateTask(detailsTask.id, {
+            title: nextTitle,
+            description: editingState.description.trim() || null,
+            priority: editingState.priority,
+            category: editingState.category.trim() || null,
+          });
+          if (!taskWasUpdated) return;
+
+          for (const attachmentId of attachmentIdsToDelete) {
+            await onDeleteAttachment(detailsTask.id, attachmentId);
+          }
+          for (const attachment of attachments) {
+            await onAddAttachment(detailsTask.id, attachment);
+          }
+          cancelEdit();
+        }}
+        onEditDirtyChange={onEditDirtyChange}
+        onRequestDelete={() => {
+          if (!detailsTask) return;
+          setConfirmDeleteTask({
+            id: detailsTask.id,
+            title: detailsTask.title,
+          });
+        }}
+        onToggleSubtask={onToggleSubtask}
+        onDeleteSubtask={(subtask) => setConfirmDeleteSubtask(subtask)}
+        onSubmitSubtask={(event) => {
+          if (detailsTask) void submitSubtask(event, detailsTask.id);
+        }}
+        onSubtaskDraftChange={(value) => {
+          if (!detailsTask) return;
+          setSubtaskDraftByTaskId((current) => ({
+            ...current,
+            [detailsTask.id]: value,
+          }));
+        }}
+        onOpenAttachment={(index) => {
+          if (!detailsTask) return;
+          setAttachmentViewer({
+            task: {
+              ...detailsTask,
+              attachments: sortAttachments(detailsTask.attachments),
+            },
+            index,
+          });
+        }}
+      />
 
       <AttachmentViewer
         viewer={attachmentViewer}
@@ -1263,6 +1290,304 @@ export function TasksList({
         loading={deletingConfirm}
       />
     </section>
+  );
+}
+
+function TaskDetailsDialog({
+  task,
+  busy,
+  subtaskDraft,
+  isEditing,
+  editingState,
+  setEditingState,
+  onClose,
+  onEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onEditDirtyChange,
+  onRequestDelete,
+  onToggleSubtask,
+  onDeleteSubtask,
+  onSubmitSubtask,
+  onSubtaskDraftChange,
+  onOpenAttachment,
+}: {
+  task: Task | null;
+  busy: boolean;
+  subtaskDraft: string;
+  isEditing: boolean;
+  editingState: EditingState | null;
+  setEditingState: Dispatch<SetStateAction<EditingState | null>>;
+  onClose: () => void;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (changes: {
+    attachments: File[];
+    attachmentIdsToDelete: string[];
+  }) => Promise<void>;
+  onEditDirtyChange?: (isDirty: boolean) => void;
+  onRequestDelete: () => void;
+  onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
+  onDeleteSubtask: (subtask: { id: string; title: string }) => void;
+  onSubmitSubtask: (event: FormEvent<HTMLFormElement>) => void;
+  onSubtaskDraftChange: (value: string) => void;
+  onOpenAttachment: (index: number) => void;
+}) {
+  const completedSubtasks =
+    task?.subtasks.filter((subtask) => subtask.is_completed).length ?? 0;
+  const subtaskCount = task?.subtasks.length ?? 0;
+  const subtaskPercent = subtaskCount
+    ? Math.round((completedSubtasks / subtaskCount) * 100)
+    : 0;
+  const descriptionLength = task?.description?.length ?? 0;
+  const contentWeight =
+    descriptionLength +
+    (task?.attachments.length ?? 0) * 280 +
+    (task?.subtasks.length ?? 0) * 120;
+  const dialogSizeClass =
+    contentWeight > 1800
+      ? "max-h-[min(92svh,64rem)] sm:w-[78rem] sm:max-w-[calc(100vw-3rem)]"
+      : contentWeight > 550
+        ? "max-h-[min(90svh,56rem)] sm:w-[60rem] sm:max-w-[calc(100vw-3rem)]"
+        : "max-h-[min(86svh,44rem)] sm:w-[42rem] sm:max-w-[calc(100vw-3rem)]";
+
+  return (
+    <Dialog
+      open={Boolean(task)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        className={`grid h-auto w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-0 dark:bg-zinc-950 sm:overflow-hidden sm:rounded-3xl ${dialogSizeClass}`}
+      >
+        {task ? (
+          <>
+            <div className="border-b border-slate-900/10 px-5 py-4 pr-12 dark:border-white/10 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="break-words text-xl leading-tight sm:text-2xl">
+                    {task.title}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Detalhes completos da tarefa
+                  </DialogDescription>
+                </div>
+                {!isEditing ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mr-8 shrink-0 rounded-full"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onEdit();
+                    }}
+                    disabled={busy}
+                  >
+                    <Pencil className="size-3.5" />
+                    Editar
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Badge className={taskSectionStyles[task.status]}>
+                  {getStatusLabel(task.status)}
+                </Badge>
+                <Badge className={getPriorityClass(task.priority)}>
+                  {getPriorityLabel(task.priority)}
+                </Badge>
+                {task.category ? (
+                  <Badge variant="outline" className="max-w-full truncate">
+                    {task.category}
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-10">
+              {isEditing && editingState ? (
+                <TaskEditForm
+                  task={task}
+                  editingState={editingState}
+                  setEditingState={setEditingState}
+                  isSaving={busy}
+                  onCancel={onCancelEdit}
+                  onDirtyChange={onEditDirtyChange}
+                  onSave={onSaveEdit}
+                />
+              ) : (
+              <div className="space-y-8">
+                {task.description ? (
+                  <section>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                      Descrição
+                    </h3>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
+                      <TaskDescription>{task.description}</TaskDescription>
+                    </p>
+                  </section>
+                ) : null}
+
+                <section>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                        Anexos
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
+                        {task.attachments.length
+                          ? `${task.attachments.length} arquivo(s)`
+                          : "Nenhum arquivo anexado"}
+                      </p>
+                    </div>
+                  </div>
+                  {task.attachments.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {sortAttachments(task.attachments).map(
+                        (attachment, index) => (
+                          <button
+                            key={attachment.id}
+                            type="button"
+                            className="group/image overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10"
+                            title={`Abrir ${attachment.file_name}`}
+                            onClick={() => onOpenAttachment(index)}
+                          >
+                            <AttachmentPreview
+                              attachment={attachment}
+                              taskId={task.id}
+                            />
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </section>
+
+                <section>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                          Subtarefas {completedSubtasks}/{subtaskCount}
+                        </h3>
+                        <span className="text-xs text-slate-500 dark:text-white/45">
+                          {subtaskPercent}%
+                        </span>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
+                          style={{ width: `${subtaskPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {task.subtasks.length ? (
+                    <ul className="mt-3 space-y-2">
+                      {task.subtasks.map((subtask) => (
+                        <li
+                          key={subtask.id}
+                          className="app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 dark:bg-white/[0.045]"
+                        >
+                          <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
+                            <Checkbox
+                              checked={subtask.is_completed}
+                              onCheckedChange={() =>
+                                void onToggleSubtask(
+                                  subtask.id,
+                                  !subtask.is_completed,
+                                )
+                              }
+                              className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
+                            />
+                            <span
+                              className={[
+                                "truncate text-sm",
+                                subtask.is_completed
+                                  ? "text-slate-400 line-through dark:text-white/35"
+                                  : "",
+                              ].join(" ")}
+                            >
+                              {subtask.title}
+                            </span>
+                          </label>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="size-11 touch-manipulation md:size-7"
+                            onClick={() => onDeleteSubtask(subtask)}
+                            aria-label="Excluir subtarefa"
+                          >
+                            <Trash2 className="size-4 text-rose-500" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-white/40">
+                      <Circle className="size-3" />
+                      Sem subtarefas ainda.
+                    </p>
+                  )}
+
+                  <form
+                    onSubmit={onSubmitSubtask}
+                    aria-busy={busy}
+                    className={[
+                      "mt-3 flex min-w-0 flex-col gap-2 rounded-xl sm:flex-row",
+                      busy ? "subtask-form-loading" : "",
+                    ].join(" ")}
+                  >
+                    <Input
+                      className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
+                      value={subtaskDraft}
+                      disabled={busy}
+                      onChange={(event) =>
+                        onSubtaskDraftChange(event.target.value)
+                      }
+                      placeholder="Nova subtarefa"
+                      maxLength={160}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
+                      disabled={busy || !subtaskDraft.trim()}
+                    >
+                      {busy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CirclePlus className="size-4" />
+                      )}
+                      {busy ? "Adicionando…" : "Adicionar"}
+                    </Button>
+                  </form>
+                </section>
+              </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end border-t border-slate-900/10 px-5 py-3 dark:border-white/10 sm:px-6">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300"
+                onClick={onRequestDelete}
+                disabled={busy}
+              >
+                <Trash2 className="size-3.5" />
+                Excluir tarefa
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 

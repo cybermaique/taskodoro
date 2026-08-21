@@ -279,7 +279,6 @@ function NoteCard({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const viewerPopupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -297,38 +296,21 @@ function NoteCard({
     }
   }, [draft, editing]);
 
-  useEffect(() => {
-    if (!viewerOpen) return;
-
-    const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        !(target instanceof Node) ||
-        viewerPopupRef.current?.contains(target)
-      ) {
-        return;
-      }
-
-      setViewerOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    return () =>
-      document.removeEventListener(
-        "pointerdown",
-        closeOnOutsidePointerDown,
-        true,
-      );
-  }, [viewerOpen]);
-
   const tags = extractHashtags(note.content);
   const contentBlocks = useMemo(
     () => parseNoteContent(note.content),
     [note.content],
   );
   const contentLineCount = note.content.split(/\r?\n/).length;
+  const containsCodeBlock = contentBlocks.some((block) => block.type === "code");
   const useFullscreenViewer =
     note.content.length > 1600 || contentLineCount > 30;
+  const viewerWidthClass =
+    containsCodeBlock || note.content.length > 900 || contentLineCount > 18
+      ? "sm:w-[min(92vw,72rem)] sm:max-w-[72rem]"
+      : note.content.length > 420 || contentLineCount > 9
+        ? "sm:w-[min(88vw,54rem)] sm:max-w-[54rem]"
+        : "sm:w-[min(82vw,42rem)] sm:max-w-[42rem]";
 
   const handleSave = async () => {
     if (
@@ -501,11 +483,12 @@ function NoteCard({
 
   return (
     <div
+      data-tilt-card
       className={[
-        "group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-shadow hover:shadow-md sm:p-4",
+        "app-list-item-enter group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-shadow hover:shadow-md sm:p-4",
         "dark:bg-white/[0.05] dark:border-white/10",
         editing ? "" : "cursor-pointer",
-        deleting ? "opacity-50 pointer-events-none" : "",
+        deleting ? "app-item-delete pointer-events-none" : "",
       ].join(" ")}
       onClick={handleCardClick}
     >
@@ -647,16 +630,15 @@ function NoteCard({
       <Dialog
         open={viewerOpen}
         onOpenChange={setViewerOpen}
-        disablePointerDismissal={false}
+        disablePointerDismissal
       >
         <DialogContent
           onBackdropClick={() => setViewerOpen(false)}
-          popupRef={viewerPopupRef}
           className={[
             "grid grid-rows-[auto_minmax(0,1fr)] gap-3 bg-white dark:bg-zinc-950",
             useFullscreenViewer
               ? "h-[100svh] w-screen max-w-none rounded-none p-4 sm:w-screen sm:max-w-none sm:p-6"
-              : "max-h-[min(92svh,56rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden p-4 sm:w-[min(94vw,88rem)] sm:max-w-[88rem] sm:p-6",
+              : `max-h-[min(92svh,56rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-hidden p-4 sm:p-6 ${viewerWidthClass}`,
           ].join(" ")}
         >
           <div className="flex min-w-0 items-start gap-3 pr-8">
@@ -817,6 +799,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           const data = (await res.json()) as { error?: string };
           throw new Error(data.error ?? "Erro ao excluir.");
         }
+        await new Promise((resolve) => window.setTimeout(resolve, 280));
         setNotes((prev) => prev.filter((n) => n.id !== id));
         toast.success("Anotação excluída!");
       } catch (e) {
@@ -864,7 +847,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   return (
     <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* compose */}
-      <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
+      <div className="app-panel-enter min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
         <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-white/40">
           <StickyNote className="size-3.5" />
           Nova anotação
@@ -935,7 +918,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* search + tag filters */}
       {notes.length > 0 && (
-        <div className="space-y-3">
+        <div className="app-stagger-list space-y-3">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -1025,7 +1008,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* notes list */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
+        <div className="app-empty-breathe flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
           <StickyNote className="size-8 text-slate-300 dark:text-white/20" />
           <p className="text-sm text-slate-500 dark:text-white/40">
             {notes.length === 0
@@ -1034,7 +1017,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="app-stagger-list space-y-3">
           {search || activeTag || createdFrom || createdTo ? (
             <p className="text-xs text-slate-400 dark:text-white/35">
               {filtered.length} anotaç{filtered.length === 1 ? "ão" : "ões"}{" "}

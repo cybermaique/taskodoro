@@ -18,10 +18,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const body = await request.json();
     const status =
-      body.status === "pending" ||
+      body.status === "not_started" ||
       body.status === "in_progress" ||
       body.status === "completed" ||
-      body.status === "canceled"
+      body.status === "waiting"
         ? (body.status as TaskStatus)
         : undefined;
 

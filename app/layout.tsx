@@ -2,6 +2,8 @@
 import { Manrope, Space_Grotesk } from "next/font/google";
 import type { Viewport } from "next";
 
+import { AmbientEffects } from "@/components/ambient-effects";
+import { SensoryEffectsProvider } from "@/components/sensory-effects";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
@@ -48,7 +50,10 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ThemeProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <SensoryEffectsProvider>
+            <AmbientEffects />
+            <ToastProvider>{children}</ToastProvider>
+          </SensoryEffectsProvider>
         </ThemeProvider>
       </body>
     </html>

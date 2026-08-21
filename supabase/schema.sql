@@ -6,7 +6,7 @@ create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
-  status text not null default 'pending' check (status in ('pending', 'in_progress', 'completed', 'canceled')),
+  status text not null default 'not_started' check (status in ('not_started', 'in_progress', 'waiting', 'completed')),
   priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
   category text,
   created_at timestamptz not null default now(),
@@ -31,6 +31,18 @@ create table if not exists public.task_attachments (
   storage_path text not null unique,
   created_at timestamptz not null default now()
 );
+
+alter table public.tasks drop constraint if exists tasks_status_check;
+update public.tasks
+set status = case
+  when status = 'pending' then 'not_started'
+  when status = 'canceled' then 'waiting'
+  else status
+end;
+alter table public.tasks alter column status set default 'not_started';
+alter table public.tasks
+  add constraint tasks_status_check
+  check (status in ('not_started', 'in_progress', 'waiting', 'completed'));
 
 insert into storage.buckets (id, name, public)
 values ('task-attachments', 'task-attachments', false)
