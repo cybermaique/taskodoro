@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/dashboard";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { Note } from "@/types/note";
-import type { Task, TaskAttachment } from "@/types/task";
+import type { Task, TaskAttachment, TaskStatusHistory } from "@/types/task";
 
 const TASK_COLUMNS = `
   id,
@@ -32,10 +32,20 @@ const TASK_COLUMNS = `
     is_completed,
     created_at,
     updated_at
+  ),
+  task_status_history(
+    id,
+    task_id,
+    from_status,
+    to_status,
+    changed_at
   )
 `;
 
-type RawTask = Task & { task_attachments?: TaskAttachment[] };
+type RawTask = Task & {
+  task_attachments?: TaskAttachment[];
+  task_status_history?: TaskStatusHistory[];
+};
 
 function mapTask(task: RawTask): Task {
   return {
@@ -44,6 +54,15 @@ function mapTask(task: RawTask): Task {
       ? task.task_attachments
       : [],
     subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+    status_history: Array.isArray(task.task_status_history)
+      ? [...task.task_status_history].sort(
+          (left, right) =>
+            new Date(left.changed_at).getTime() -
+            new Date(right.changed_at).getTime(),
+        )
+      : Array.isArray(task.status_history)
+        ? task.status_history
+        : [],
   };
 }
 

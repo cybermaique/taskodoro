@@ -18,6 +18,8 @@ import {
   ChevronRight,
   Circle,
   CirclePlus,
+  CalendarDays,
+  History,
   Pencil,
   Search,
   Trash2,
@@ -42,6 +44,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskDescription } from "@/components/task-description";
 import { TaskDropCelebration } from "@/components/task-drop-celebration";
+import { formatCompactDate, formatDateTime } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -52,6 +55,7 @@ import type {
   Task,
   TaskAttachment,
   TaskPriority,
+  TaskStatusHistory,
   TaskView,
 } from "@/types/task";
 
@@ -125,6 +129,104 @@ function getStatusLabel(status: Task["status"]) {
   }
 
   return "Não iniciada";
+}
+
+function getTaskHistory(task: Task): TaskStatusHistory[] {
+  const history = Array.isArray(task.status_history)
+    ? [...task.status_history].sort(
+        (left, right) =>
+          new Date(left.changed_at).getTime() -
+          new Date(right.changed_at).getTime(),
+      )
+    : [];
+
+  if (history.length) {
+    return history;
+  }
+
+  return [
+    {
+      id: `fallback-${task.id}`,
+      task_id: task.id,
+      from_status: null,
+      to_status: task.status,
+      changed_at: task.created_at,
+    },
+  ];
+}
+
+function TaskHistoryTimeline({
+  task,
+  compact = false,
+}: {
+  task: Task;
+  compact?: boolean;
+}) {
+  const history = getTaskHistory(task);
+
+  return (
+    <ol
+      className={[
+        "space-y-2.5 pl-1",
+        compact ? "max-h-44 overflow-y-auto pr-1" : "",
+      ].join(" ")}
+    >
+      {history.map((event, index) => (
+        <li key={event.id} className="relative flex min-w-0 gap-2.5">
+          {index < history.length - 1 ? (
+            <span className="absolute left-[0.28rem] top-3 h-[calc(100%+0.55rem)] w-px bg-current opacity-15" />
+          ) : null}
+          <span
+            className={[
+              "relative mt-1 size-2 shrink-0 rounded-full ring-4 ring-inherit",
+              event.from_status === null
+                ? "bg-sky-400"
+                : event.to_status === "completed"
+                  ? "bg-emerald-400"
+                  : "bg-teal-400",
+            ].join(" ")}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-[0.7rem] font-semibold text-current">
+              {event.from_status
+                ? `${getStatusLabel(event.from_status)} → ${getStatusLabel(event.to_status)}`
+                : "Criada"}
+            </p>
+            <time
+              dateTime={event.changed_at}
+              className="text-[0.65rem] text-current opacity-55"
+            >
+              {formatDateTime(event.changed_at)}
+            </time>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function TaskHistoryTooltip({ task }: { task: Task }) {
+  return (
+    <div className="group/task-history relative z-10 inline-flex min-w-0">
+      <span
+        className="inline-flex items-center gap-1 text-[0.65rem] font-medium text-slate-500/80 dark:text-white/40"
+        aria-label={`Criada em ${formatCompactDate(task.created_at)}`}
+      >
+        <CalendarDays className="size-3" />
+        {formatCompactDate(task.created_at)}
+      </span>
+      <div
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full left-1 z-50 mb-2 w-[min(16rem,calc(100vw-1.5rem))] translate-y-1 rounded-2xl border border-slate-900/10 bg-white/95 p-3 text-slate-700 opacity-0 shadow-xl backdrop-blur-xl transition-all duration-200 group-hover/task-card:pointer-events-auto group-hover/task-card:visible group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-hover/task-history:pointer-events-auto group-hover/task-history:visible group-hover/task-history:translate-y-0 group-hover/task-history:opacity-100 dark:border-white/10 dark:bg-zinc-950/95 dark:text-white"
+      >
+        <div className="mb-2 flex items-center gap-1.5 text-[0.68rem] font-bold uppercase tracking-wide text-slate-500 dark:text-white/50">
+          <History className="size-3.5 text-teal-500" />
+          Histórico da tarefa
+        </div>
+        <TaskHistoryTimeline task={task} compact />
+      </div>
+    </div>
+  );
 }
 
 const taskSectionOrder: TaskSection[] = [
@@ -955,7 +1057,7 @@ export function TasksList({
                           onDragOver={(event) => handleDragOver(event, task.id)}
                           onDrop={(event) => handleDropOnTask(event, task.id)}
                           className={[
-                            "app-list-item-enter group flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                            "app-list-item-enter group group/task-card flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                             draggingTaskId === task.id
                               ? "task-card-dragging z-20 opacity-70"
                               : "",
@@ -970,7 +1072,7 @@ export function TasksList({
                               ? "h-auto overflow-visible"
                               : isCompleted
                                 ? "h-auto min-h-0 overflow-visible"
-                                : "min-h-32 overflow-hidden",
+                                : "min-h-32 overflow-visible",
                             isCompact
                               ? "rounded-2xl p-2.5"
                               : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
@@ -978,14 +1080,17 @@ export function TasksList({
                           ].join(" ")}
                         >
                           {isCompleted ? (
-                            <button
-                              type="button"
-                              onClick={() => setDetailsTaskId(task.id)}
-                              className="line-clamp-2 w-full text-left text-sm font-semibold leading-snug text-slate-500 dark:text-white/55"
-                              aria-label={`Abrir tarefa finalizada: ${task.title}`}
-                            >
-                              {task.title}
-                            </button>
+                            <div className="flex min-w-0 flex-col items-start gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setDetailsTaskId(task.id)}
+                                className="line-clamp-2 w-full text-left text-sm font-semibold leading-snug text-slate-500 dark:text-white/55"
+                                aria-label={`Abrir tarefa finalizada: ${task.title}`}
+                              >
+                                {task.title}
+                              </button>
+                              <TaskHistoryTooltip task={task} />
+                            </div>
                           ) : (
                           <div className="flex min-w-0 flex-1 flex-col gap-3">
                             <div className="flex min-w-0 items-start">
@@ -1094,6 +1199,7 @@ export function TasksList({
                                         {task.attachments.length}
                                       </Badge>
                                     ) : null}
+                                    <TaskHistoryTooltip task={task} />
                                   </div>
                                 </>
                               )}
@@ -1430,6 +1536,18 @@ function TaskDetailsDialog({
                     </p>
                   </section>
                 ) : null}
+
+                <section>
+                  <div className="mb-3 flex items-center gap-2">
+                    <History className="size-4 text-teal-500" />
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                      Histórico
+                    </h3>
+                  </div>
+                  <div className="rounded-2xl border border-slate-900/10 bg-slate-950/[0.025] p-3 text-slate-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/80">
+                    <TaskHistoryTimeline task={task} />
+                  </div>
+                </section>
 
                 <section>
                   <div className="flex items-center justify-between gap-3">
