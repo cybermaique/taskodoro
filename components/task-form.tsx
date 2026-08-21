@@ -2,6 +2,7 @@
 
 import {
   type ClipboardEvent,
+  type ChangeEvent,
   type DragEvent,
   type FormEvent,
   useEffect,
@@ -29,6 +30,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
 import type { TaskPriority } from "@/types/task";
 
 interface TaskFormValues {
@@ -92,6 +94,7 @@ export function TaskForm({
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
   const successTimeoutRef = useRef<number | null>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const isDirty =
     values.title !== EMPTY_VALUES.title ||
@@ -154,6 +157,36 @@ export function TaskForm({
     setSubtasks((current) => [...current, title]);
     setSubtaskDraft("");
     setErrorMessage(null);
+  };
+
+  const handleDescriptionChange = (
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const expansion = expandSlashCodeCommand(
+      event.target.value,
+      event.target.selectionStart,
+      event.target.selectionEnd,
+    );
+
+    if (!expansion) {
+      setValues((current) => ({
+        ...current,
+        description: event.target.value,
+      }));
+      return;
+    }
+
+    setValues((current) => ({
+      ...current,
+      description: expansion.value,
+    }));
+    window.requestAnimationFrame(() => {
+      descriptionRef.current?.focus();
+      descriptionRef.current?.setSelectionRange(
+        expansion.caretPosition,
+        expansion.caretPosition,
+      );
+    });
   };
 
   const onSubmit = async (event: FormEvent) => {
@@ -340,19 +373,22 @@ export function TaskForm({
           />
 
           {!isCompact ? (
-            <Textarea
-              className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
-              placeholder="Descrição opcional"
-              value={values.description}
-              disabled={isSubmitting}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-              rows={3}
-            />
+            <>
+              <Textarea
+                ref={descriptionRef}
+                className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
+                placeholder="Descrição opcional"
+                value={values.description}
+                disabled={isSubmitting}
+                onChange={handleDescriptionChange}
+                rows={3}
+              />
+              <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
+                <ListChecks className="size-3" />
+                Use <code>/code</code> ou <code>/json</code> em uma nova linha;
+                links podem usar <code>Texto &gt; site.com</code>.
+              </p>
+            </>
           ) : null}
         </div>
 

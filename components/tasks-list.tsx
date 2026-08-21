@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import {
+  type ChangeEvent,
   type ClipboardEvent,
   type DragEvent,
   type FormEvent,
@@ -51,6 +52,7 @@ import {
 import { TaskDescription } from "@/components/task-description";
 import { TaskDropCelebration } from "@/components/task-drop-celebration";
 import { formatCompactDate, formatDateTime } from "@/lib/format";
+import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
 import {
   Select,
   SelectContent,
@@ -1458,11 +1460,9 @@ export function TasksList({
                                         {task.title}
                                       </button>
                                       {task.description ? (
-                                        <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
-                                          <TaskDescription>
-                                            {task.description}
-                                          </TaskDescription>
-                                        </p>
+                                        <TaskDescription className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
+                                          {task.description}
+                                        </TaskDescription>
                                       ) : null}
                                     </div>
                                   </div>
@@ -1872,9 +1872,9 @@ function TaskDetailsDialog({
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
                       Descrição
                     </h3>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
-                      <TaskDescription>{task.description}</TaskDescription>
-                    </p>
+                    <TaskDescription className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
+                      {task.description}
+                    </TaskDescription>
                   </section>
                 ) : null}
 
@@ -2252,6 +2252,7 @@ function TaskEditForm({
   const [attachmentPendingDeletion, setAttachmentPendingDeletion] =
     useState<TaskAttachment | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const hasDetailChanges =
     editingState.title !== task.title ||
@@ -2286,6 +2287,34 @@ function TaskEditForm({
     if (files.length) selectAttachments(files);
   };
 
+  const handleDescriptionChange = (
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const expansion = expandSlashCodeCommand(
+      event.target.value,
+      event.target.selectionStart,
+      event.target.selectionEnd,
+    );
+
+    if (!expansion) {
+      setEditingState((current) =>
+        current ? { ...current, description: event.target.value } : current,
+      );
+      return;
+    }
+
+    setEditingState((current) =>
+      current ? { ...current, description: expansion.value } : current,
+    );
+    window.requestAnimationFrame(() => {
+      descriptionRef.current?.focus();
+      descriptionRef.current?.setSelectionRange(
+        expansion.caretPosition,
+        expansion.caretPosition,
+      );
+    });
+  };
+
   return (
     <div
       className={[
@@ -2317,17 +2346,18 @@ function TaskEditForm({
       />
 
       <Textarea
+        ref={descriptionRef}
         className="min-h-20 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
         value={editingState.description}
         disabled={isSaving}
-        onChange={(event) =>
-          setEditingState((current) =>
-            current ? { ...current, description: event.target.value } : current,
-          )
-        }
+        onChange={handleDescriptionChange}
         placeholder="Descrição opcional"
         rows={3}
       />
+      <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
+        Use <code>/code</code> ou <code>/json</code> em uma nova linha; links
+        podem usar <code>Texto &gt; site.com</code>.
+      </p>
 
       <div className="rounded-2xl border border-slate-900/10 p-3 dark:border-white/10">
         <p className="mb-2 text-xs font-medium text-slate-500 dark:text-white/45">
