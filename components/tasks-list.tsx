@@ -76,6 +76,7 @@ interface TasksListProps {
   initialColumnWidths: TaskColumnWidths | null;
   onColumnWidthsChange?: (widths: TaskColumnWidths) => Promise<void>;
   categorySuggestions: string[];
+  onRequestCreate?: () => void;
   onEditDirtyChange?: (isDirty: boolean) => void;
   onDeleteTask: (taskId: string) => Promise<boolean>;
   onUpdateTask: (
@@ -524,6 +525,7 @@ export function TasksList({
   initialColumnWidths,
   onColumnWidthsChange,
   categorySuggestions,
+  onRequestCreate,
   onEditDirtyChange,
   onDeleteTask,
   onUpdateTask,
@@ -1117,11 +1119,24 @@ export function TasksList({
     <section className="dashboard-reveal-board min-w-0 space-y-4">
       <div className="dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold">Tarefas</h2>
-            <p className="text-sm text-slate-500 dark:text-white/45">
-              {visibleTaskCount} no quadro
-            </p>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold">Tarefas</h2>
+              <p className="text-sm text-slate-500 dark:text-white/45">
+                {visibleTaskCount} no quadro
+              </p>
+            </div>
+            {onRequestCreate ? (
+              <Button
+                type="button"
+                className="h-10 shrink-0 gap-1.5 rounded-full px-3 sm:px-4"
+                onClick={onRequestCreate}
+              >
+                <CirclePlus className="size-4" />
+                <span className="hidden sm:inline">Nova tarefa</span>
+                <span className="sm:hidden">Nova</span>
+              </Button>
+            ) : null}
           </div>
         </div>
 

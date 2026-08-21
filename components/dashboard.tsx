@@ -14,6 +14,12 @@ import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import type { Note } from "@/types/note";
@@ -60,7 +66,7 @@ interface DashboardProps {
   ) => Promise<void>;
 }
 
-type DashboardTab = "task-form" | "tasks" | "notes";
+type DashboardTab = "tasks" | "notes";
 
 export function Dashboard({
   initialTasks,
@@ -74,6 +80,7 @@ export function Dashboard({
     sortByMostRecent(initialTasks),
   );
   const [creatingTask, setCreatingTask] = useState(false);
+  const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [newlyCreatedTaskId, setNewlyCreatedTaskId] = useState<string | null>(
     null,
   );
@@ -89,7 +96,7 @@ export function Dashboard({
     }
 
     const stored = window.localStorage.getItem("taskboard_selected_tab");
-    return stored === "task-form" || stored === "tasks" || stored === "notes"
+    return stored === "tasks" || stored === "notes"
       ? stored
       : "tasks";
   });
@@ -228,6 +235,7 @@ export function Dashboard({
       setTasks((current) => upsertTask(current, createdTask));
       setNewlyCreatedTaskId(createdTask.id);
       setSelectedTab("tasks");
+      setTaskCreateOpen(false);
       toast.success("Tarefa criada com sucesso!");
     } finally {
       setCreatingTask(false);
@@ -475,6 +483,20 @@ export function Dashboard({
     setSelectedTab(nextTab);
   };
 
+  const handleTaskCreateDialogChange = (open: boolean) => {
+    if (
+      !open &&
+      hasUnsavedTaskForm &&
+      !window.confirm(
+        "Você tem uma tarefa em edição. Deseja fechar e descartar o rascunho?",
+      )
+    ) {
+      return;
+    }
+
+    setTaskCreateOpen(open);
+  };
+
   return (
     <main className="app-dashboard-enter relative isolate min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
       <div className="dashboard-boot-layer" aria-hidden="true">
@@ -556,18 +578,9 @@ export function Dashboard({
           className="dashboard-reveal-tabs min-w-0 gap-3 sm:gap-4"
         >
           <TabsList
-            className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
+            className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-2 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
             style={{ top: "max(0.5rem, var(--safe-area-top))" }}
           >
-            <TabsTrigger
-              value="task-form"
-              aria-label="Nova tarefa"
-              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
-            >
-              <CircleDot className="size-4" />
-              <span className="sm:hidden">Criar</span>
-              <span className="hidden sm:inline">Nova tarefa</span>
-            </TabsTrigger>
             <TabsTrigger
               value="tasks"
               aria-label="Tarefas"
@@ -587,19 +600,6 @@ export function Dashboard({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent
-            value="task-form"
-            className="dashboard-scene min-w-0"
-          >
-            <TaskForm
-              isSubmitting={creatingTask}
-              isCompact={isCompact}
-              categorySuggestions={categorySuggestions}
-              onDirtyChange={setHasUnsavedTaskForm}
-              onCreate={createTask}
-            />
-          </TabsContent>
-
           <TabsContent value="tasks" className="dashboard-scene min-w-0">
             <section className="min-w-0">
               <div className={isCompact ? "space-y-0" : "space-y-5"}>
@@ -613,6 +613,7 @@ export function Dashboard({
                     onProfilePreferenceChange({ task_column_widths: widths })
                   }
                   categorySuggestions={categorySuggestions}
+                  onRequestCreate={() => setTaskCreateOpen(true)}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
@@ -630,6 +631,25 @@ export function Dashboard({
             <NotesPanel initialNotes={initialNotes} />
           </TabsContent>
         </Tabs>
+
+        <Dialog
+          open={taskCreateOpen}
+          onOpenChange={handleTaskCreateDialogChange}
+        >
+          <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 p-2 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
+            <DialogTitle className="sr-only">Nova tarefa</DialogTitle>
+            <DialogDescription className="sr-only">
+              Crie uma tarefa com descrição, anexos e subtarefas opcionais.
+            </DialogDescription>
+            <TaskForm
+              isSubmitting={creatingTask}
+              isCompact={false}
+              categorySuggestions={categorySuggestions}
+              onDirtyChange={setHasUnsavedTaskForm}
+              onCreate={createTask}
+            />
+          </DialogContent>
+        </Dialog>
 
       </div>
     </main>

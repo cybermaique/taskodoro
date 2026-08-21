@@ -1002,6 +1002,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -1111,6 +1112,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       }, 2200);
       setTitleDraft("");
       setDraft("");
+      setCreateDialogOpen(false);
       toast.success("Anotação criada!");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao salvar anotação.";
@@ -1261,77 +1263,90 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     });
   };
 
+  const handleCreateDialogChange = (open: boolean) => {
+    if (
+      !open &&
+      !submitting &&
+      (titleDraft.trim() || draft.trim()) &&
+      !window.confirm("Fechar e manter o rascunho da anotação para depois?")
+    ) {
+      return;
+    }
+
+    setCreateDialogOpen(open);
+  };
+
   return (
     <div className="dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
-      {/* compose */}
-      <div className="app-panel-enter dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
-        <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-white/40">
-          <StickyNote className="size-3.5" />
-          Nova anotação
-        </div>
-        <Input
-          value={titleDraft}
-          onChange={(event) => setTitleDraft(event.target.value)}
-          disabled={submitting}
-          maxLength={160}
-          placeholder="Título da anotação"
-          className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
-        />
-        <Textarea
-          ref={textareaRef}
-          value={draft}
-          disabled={submitting}
-          onChange={handleDraftChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
-          className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
-          rows={3}
-        />
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
-          <Braces className="size-3" />
-          Digite /code ou /json em uma nova linha para inserir um bloco.
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            className="h-11 min-w-0 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:h-8 sm:flex-none sm:text-xs"
-            onClick={handleCreate}
-            disabled={submitting || !titleDraft.trim() || !draft.trim()}
-          >
-            {submitting ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Plus className="size-3.5" />
-            )}
-            {submitting ? "Salvando…" : "Salvar anotação"}
-          </Button>
-          {(titleDraft.trim() || draft.trim()) && (
-            <span className="hidden text-xs text-slate-400 sm:inline">
-              Ctrl+Enter para salvar
-            </span>
-          )}
-          {(titleDraft.trim() || draft.trim()) && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
+      <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
+        <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-6">
+          <DialogTitle className="text-xl">Nova anotação</DialogTitle>
+          <DialogDescription>
+            Registre uma ideia, um link ou um bloco de código para consultar
+            depois.
+          </DialogDescription>
+          <div className="app-panel-enter min-w-0 space-y-4 rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/[0.05]">
+            <Input
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
               disabled={submitting}
-              onClick={() => {
-                setTitleDraft("");
-                setDraft("");
-              }}
-            >
-              <X className="size-3" />
-              Limpar
-            </Button>
-          )}
-        </div>
-        {error && (
-          <p className="mt-2 break-words text-xs text-red-500 [overflow-wrap:anywhere]">
-            {error}
-          </p>
-        )}
-      </div>
+              maxLength={160}
+              placeholder="Título da anotação"
+              className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
+            />
+            <Textarea
+              ref={textareaRef}
+              value={draft}
+              disabled={submitting}
+              onChange={handleDraftChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
+              className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
+              rows={3}
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                className="h-11 min-w-0 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:h-8 sm:flex-none sm:text-xs"
+                onClick={handleCreate}
+                disabled={submitting || !titleDraft.trim() || !draft.trim()}
+              >
+                {submitting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                {submitting ? "Salvando…" : "Salvar anotação"}
+              </Button>
+              {(titleDraft.trim() || draft.trim()) && (
+                <span className="hidden text-xs text-slate-400 sm:inline">
+                  Ctrl+Enter para salvar
+                </span>
+              )}
+              {(titleDraft.trim() || draft.trim()) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-11 rounded-full px-4 text-sm sm:h-7 sm:flex-none sm:px-3 sm:text-xs"
+                  disabled={submitting}
+                  onClick={() => {
+                    setTitleDraft("");
+                    setDraft("");
+                  }}
+                >
+                  <X className="size-3" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+            {error && (
+              <p className="mt-2 break-words text-xs text-red-500 [overflow-wrap:anywhere]">
+                {error}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {pinnedNotes.length > 0 && (
         <section className="app-pinned-live app-panel-enter dashboard-reveal-panel rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">
@@ -1452,13 +1467,35 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         </div>
       )}
 
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Anotações</h2>
+          <p className="text-sm text-slate-500 dark:text-white/45">
+            {notes.length} {notes.length === 1 ? "anotação" : "anotações"} no
+            seu espaço
+          </p>
+        </div>
+        <Button
+          type="button"
+          className="h-10 shrink-0 gap-1.5 rounded-full bg-violet-600 px-3 text-white hover:bg-violet-700 sm:px-4"
+          onClick={() => {
+            setError(null);
+            setCreateDialogOpen(true);
+          }}
+        >
+          <Plus className="size-4" />
+          <span className="hidden sm:inline">Nova anotação</span>
+          <span className="sm:hidden">Nova</span>
+        </Button>
+      </div>
+
       {/* notes list */}
       {filtered.length === 0 ? (
         <div className="app-empty-breathe dashboard-reveal-panel flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
           <StickyNote className="size-8 text-slate-300 dark:text-white/20" />
           <p className="text-sm text-slate-500 dark:text-white/40">
             {notes.length === 0
-              ? "Nenhuma anotação ainda. Escreva algo acima!"
+              ? "Nenhuma anotação ainda. Clique em Nova anotação para começar."
               : "Nenhuma anotação encontrada para este filtro."}
           </p>
         </div>
