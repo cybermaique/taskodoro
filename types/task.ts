@@ -1,4 +1,8 @@
-export type TaskStatus = "pending" | "in_progress" | "completed" | "canceled";
+export type TaskStatus =
+  | "not_started"
+  | "in_progress"
+  | "waiting"
+  | "completed";
 export type TaskPriority = "low" | "medium" | "high";
 
 export interface Subtask {
@@ -33,7 +37,6 @@ export interface Task {
   subtasks: Subtask[];
 }
 
-export type TaskFilter = "all" | TaskStatus;
 export type TaskView = "all" | "work" | "personal" | "travel";
 
 export interface CreateTaskInput {

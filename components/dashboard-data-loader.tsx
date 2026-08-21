@@ -113,7 +113,7 @@ export function DashboardDataLoader({
   return (
     <>
       {loadError ? (
-        <p className="fixed inset-x-3 top-16 z-50 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="app-message-enter fixed inset-x-3 top-16 z-50 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           Não foi possível carregar seus dados: {loadError}
         </p>
       ) : null}

@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import confetti from "canvas-confetti";
 import {
   CheckCircle2,
   CircleDot,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { NotesPanel } from "@/components/notes-panel";
+import { SoundToggle } from "@/components/sensory-effects";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -117,13 +119,15 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   }, [selectedTab]);
 
   const dashboardStats = useMemo(() => {
-    const pending = tasks.filter((task) => task.status === "pending").length;
+    const notStarted = tasks.filter(
+      (task) => task.status === "not_started",
+    ).length;
     const completed = tasks.filter(
       (task) => task.status === "completed",
     ).length;
 
     return {
-      pending,
+      notStarted,
       completed,
     };
   }, [tasks]);
@@ -228,12 +232,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
     }
   };
 
-  const toggleTask = async (task: Task) => {
-    await updateTaskWithBusy(task.id, {
-      status: task.status === "completed" ? "pending" : "completed",
-    });
-  };
-
   const deleteTask = async (taskId: string) => {
     setBusyTaskId(taskId);
     setErrorMessage(null);
@@ -331,11 +329,13 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
 
       setTasks((current) => upsertTask(current, data.task as Task));
       toast.success("Subtarefa criada!");
+      return true;
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Erro ao criar subtarefa.";
       setErrorMessage(msg);
       toast.error(msg);
+      return false;
     } finally {
       setBusyTaskId(null);
     }
@@ -362,6 +362,24 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
       }
 
       setTasks((current) => upsertTask(current, data.task as Task));
+      const completedAllSubtasks =
+        isCompleted &&
+        data.task.subtasks.length > 0 &&
+        data.task.subtasks.every((subtask) => subtask.is_completed);
+      if (completedAllSubtasks) {
+        toast.success("Todas as subtarefas concluídas! ✨");
+        void confetti({
+          particleCount: 58,
+          spread: 78,
+          startVelocity: 34,
+          gravity: 0.75,
+          scalar: 0.82,
+          origin: { x: 0.5, y: 0.7 },
+          colors: ["#2dd4bf", "#34d399", "#facc15", "#818cf8"],
+          disableForReducedMotion: false,
+          zIndex: 120,
+        });
+      }
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Erro ao atualizar subtarefa.";
@@ -410,8 +428,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
   };
 
   return (
-    <main className="min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
-      <div className="dashboard-safe-insets mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4 sm:gap-6">
+    <main className="app-dashboard-enter relative isolate min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
+      <div className="dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col gap-4 sm:gap-6">
         <header
           className={[
             "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
@@ -453,8 +471,8 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
               <>
                 <StatPill
                   icon={CircleDot}
-                  label="Pendentes"
-                  value={dashboardStats.pending}
+                  label="Não iniciadas"
+                  value={dashboardStats.notStarted}
                 />
                 <StatPill
                   icon={CheckCircle2}
@@ -483,12 +501,13 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 Compacto
               </Button>
             </div>
+            <SoundToggle />
             <ThemeToggle />
           </div>
         </header>
 
         {errorMessage ? (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="app-message-enter">
             <AlertTitle>Erro</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
@@ -499,7 +518,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
           className="min-w-0 gap-3 sm:gap-4"
         >
           <TabsList
-            className="sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
+            className="app-tabs-bar sticky z-30 grid min-h-12 w-full grid-cols-3 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
             style={{ top: "max(0.5rem, var(--safe-area-top))" }}
           >
             <TabsTrigger
@@ -549,7 +568,6 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                   isCompact={isCompact}
                   categorySuggestions={categorySuggestions}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
-                  onToggleTask={toggleTask}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
                   onAddAttachment={addTaskAttachment}
@@ -589,6 +607,7 @@ export function Dashboard({ initialTasks, initialNotes }: DashboardProps) {
                 Compacto
               </Button>
             </div>
+            <SoundToggle />
             <ThemeToggle />
           </div>
         ) : null}
@@ -607,10 +626,39 @@ function StatPill({
   value: number;
 }) {
   return (
-    <div className="hidden items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur sm:flex dark:border-white/10 dark:bg-white/10">
+    <div className="app-stat-pill hidden items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur sm:flex dark:border-white/10 dark:bg-white/10">
       <Icon className="size-4 text-teal-600 dark:text-teal-300" />
       <span className="text-slate-500 dark:text-white/55">{label}</span>
-      <strong>{value}</strong>
+      <AnimatedNumber value={value} />
     </div>
+  );
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValueRef = useRef(value);
+
+  useEffect(() => {
+    const from = previousValueRef.current;
+    previousValueRef.current = value;
+    if (from === value) return;
+
+    const startedAt = performance.now();
+    let frameId = 0;
+    const animate = (now: number) => {
+      const progress = Math.min((now - startedAt) / 520, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(from + (value - from) * eased));
+      if (progress < 1) frameId = window.requestAnimationFrame(animate);
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [value]);
+
+  return (
+    <strong key={value} className="app-stat-number tabular-nums">
+      {displayValue}
+    </strong>
   );
 }
