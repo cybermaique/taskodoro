@@ -12,11 +12,13 @@ export async function PATCH(
       title?: string;
       content?: string;
       tags?: string[] | null;
+      is_pinned?: boolean;
     };
     const note = await updateNote(id, {
       title: body.title,
       content: body.content,
       tags: body.tags,
+      is_pinned: body.is_pinned,
     });
     return NextResponse.json({ note });
   } catch (error) {

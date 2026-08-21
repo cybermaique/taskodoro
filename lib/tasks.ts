@@ -8,6 +8,7 @@ import type {
   Task,
   TaskAttachment,
   TaskPriority,
+  TaskStatusHistory,
   TaskStatus,
   UpdateSubtaskInput,
   UpdateTaskInput,
@@ -38,6 +39,13 @@ const TASK_COLUMNS = `
     is_completed,
     created_at,
     updated_at
+  ),
+  task_status_history(
+    id,
+    task_id,
+    from_status,
+    to_status,
+    changed_at
   )
 `;
 
@@ -74,7 +82,15 @@ function normalizeStatus(value: string | undefined): TaskStatus {
 }
 
 function mapTask(task: Task): Task {
-  const rawTask = task as Task & { task_attachments?: TaskAttachment[] };
+  const rawTask = task as Task & {
+    task_attachments?: TaskAttachment[];
+    task_status_history?: TaskStatusHistory[];
+  };
+  const statusHistory = Array.isArray(rawTask.task_status_history)
+    ? rawTask.task_status_history
+    : Array.isArray(task.status_history)
+      ? task.status_history
+      : [];
 
   return {
     ...task,
@@ -87,6 +103,11 @@ function mapTask(task: Task): Task {
             new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
         )
       : [],
+    status_history: [...statusHistory].sort(
+      (left, right) =>
+        new Date(left.changed_at).getTime() -
+        new Date(right.changed_at).getTime(),
+    ),
   };
 }
 
@@ -216,7 +237,28 @@ export async function createTask(input: CreateTaskInput) {
     throw new Error(error.message);
   }
 
-  return mapTask(data as unknown as Task);
+  const createdTask = data as unknown as Task;
+  const subtaskTitles = (input.subtasks ?? [])
+    .map((title) => title.trim())
+    .filter(Boolean);
+
+  if (subtaskTitles.length) {
+    const { error: subtasksError } = await supabase.from("subtasks").insert(
+      subtaskTitles.map((title) => ({
+        task_id: createdTask.id,
+        title,
+        is_completed: false,
+      })),
+    );
+
+    if (subtasksError) {
+      throw new Error(subtasksError.message);
+    }
+
+    return getTaskById(createdTask.id);
+  }
+
+  return mapTask(createdTask);
 }
 
 export async function updateTask(id: string, input: UpdateTaskInput) {

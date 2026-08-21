@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
       body.priority === "low" || body.priority === "medium" || body.priority === "high"
         ? (body.priority as TaskPriority)
         : undefined;
+    const subtasks = Array.isArray(body.subtasks)
+      ? body.subtasks
+          .filter((title: unknown): title is string => typeof title === "string")
+          .map((title: string) => title.trim())
+          .filter(Boolean)
+          .slice(0, 20)
+      : undefined;
     const task = await createTask({
       title,
       description: typeof body.description === "string" ? body.description : "",
@@ -46,6 +53,7 @@ export async function POST(request: NextRequest) {
         body.category === null || typeof body.category === "string"
           ? body.category
           : undefined,
+      subtasks,
     });
 
     return NextResponse.json({ task }, { status: 201 });
