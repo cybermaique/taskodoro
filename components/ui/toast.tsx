@@ -11,6 +11,8 @@ import {
 } from "react";
 import { CheckCircle2, AlertTriangle, Info, X, XCircle } from "lucide-react";
 
+import { useSensoryEffects } from "@/components/sensory-effects";
+
 /* ── types ─────────────────────────────────────────────── */
 
 type ToastVariant = "success" | "error" | "warning" | "info";
@@ -100,7 +102,7 @@ function Toast({
     <div
       role="alert"
       className={[
-        "pointer-events-auto flex min-w-72 max-w-sm items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl transition-all",
+        "app-toast-enter pointer-events-auto relative flex min-w-72 max-w-sm items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl transition-all",
         style.container,
         exiting
           ? "translate-y-2 scale-95 opacity-0"
@@ -108,7 +110,7 @@ function Toast({
       ].join(" ")}
       style={{ transitionDuration: `${TOAST_ANIMATION_MS}ms` }}
     >
-      {style.icon}
+      <span className="app-toast-icon">{style.icon}</span>
       <p className="min-w-0 flex-1 break-words text-sm font-medium [overflow-wrap:anywhere]">
         {item.message}
       </p>
@@ -120,6 +122,10 @@ function Toast({
       >
         <X className="size-3.5" />
       </button>
+      <span
+        className={`app-toast-timer app-toast-timer-${item.variant}`}
+        aria-hidden="true"
+      />
     </div>
   );
 }
@@ -130,11 +136,21 @@ let nextId = 1;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const { playSound } = useSensoryEffects();
 
   const addToast = useCallback((variant: ToastVariant, message: string) => {
     const id = nextId++;
     setToasts((current) => [...current, { id, variant, message }]);
-  }, []);
+    playSound(
+      variant === "success"
+        ? "success"
+        : variant === "error"
+          ? "error"
+          : variant === "warning"
+            ? "warning"
+            : "click",
+    );
+  }, [playSound]);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((current) => current.filter((t) => t.id !== id));
