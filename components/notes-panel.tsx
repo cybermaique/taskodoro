@@ -1277,20 +1277,20 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   return (
     <div className="dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
-        <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-6">
+        <DialogContent className="flex h-svh max-h-svh w-screen max-w-none flex-col overflow-y-auto rounded-none border-slate-900/10 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-6">
           <DialogTitle className="text-xl">Nova anotação</DialogTitle>
           <DialogDescription>
             Registre uma ideia, um link ou um bloco de código para consultar
             depois.
           </DialogDescription>
-          <div className="app-panel-enter min-w-0 space-y-4 rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/[0.05]">
+          <div className="app-panel-enter flex min-h-0 min-w-0 flex-1 flex-col gap-4 rounded-2xl border border-slate-900/10 bg-white/70 p-4 shadow-sm backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/[0.05]">
             <Input
               value={titleDraft}
               onChange={(event) => setTitleDraft(event.target.value)}
               disabled={submitting}
               maxLength={160}
               placeholder="Título da anotação"
-              className="mb-2 h-11 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
+              className="h-11 shrink-0 rounded-xl border-slate-200 bg-white/50 text-base font-semibold focus-visible:ring-violet-400 sm:h-9 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
             />
             <Textarea
               ref={textareaRef}
@@ -1299,10 +1299,10 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
               onChange={handleDraftChange}
               onKeyDown={handleKeyDown}
               placeholder="Anote qualquer coisa… use #tags para organizar. Ex: Marcilio perguntou sobre #feature-flag da coluna discrepância."
-              className="min-h-24 resize-none rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-[80px] sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
-              rows={3}
+              className="min-h-72 min-w-0 max-h-[calc(100svh-12rem)] flex-1 resize-y overflow-y-auto rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-0 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
+              rows={12}
             />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 className="h-11 min-w-0 flex-1 gap-1.5 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 sm:h-8 sm:flex-none sm:text-xs"
