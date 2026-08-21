@@ -1304,7 +1304,7 @@ export function TasksList({
                           onDragOver={(event) => handleDragOver(event, task.id)}
                           onDrop={(event) => handleDropOnTask(event, task.id)}
                           className={[
-                            "app-list-item-enter dashboard-reveal-card group group/task-card relative flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                            "app-list-item-enter dashboard-reveal-card group/task-card relative flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                             draggingTaskId === task.id
                               ? "task-card-dragging z-20 opacity-70"
                               : "",
@@ -1347,7 +1347,7 @@ export function TasksList({
                                 event.stopPropagation();
                               }}
                               onClick={(event) => event.stopPropagation()}
-      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
+      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
                             >
                               <TaskHistoryAction
                                 task={task}
