@@ -53,6 +53,7 @@ export interface CreateTaskInput {
   description?: string;
   priority?: TaskPriority;
   category?: string | null;
+  subtasks?: string[];
 }
 
 export interface UpdateTaskInput {

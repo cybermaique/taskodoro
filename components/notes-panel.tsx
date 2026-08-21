@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Braces,
   CalendarDays,
@@ -9,6 +17,7 @@ import {
   Hash,
   Maximize2,
   Pencil,
+  Pin,
   Plus,
   Search,
   StickyNote,
@@ -20,6 +29,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ContextMenu,
+  type ContextMenuAction,
+} from "@/components/ui/context-menu";
 import { useToast } from "@/components/ui/toast";
 import {
   Dialog,
@@ -173,6 +186,10 @@ function splitUrlTrailingPunctuation(value: string) {
   };
 }
 
+function normalizeShortcutUrl(value: string) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
 function CodeBlock({
   label,
   content,
@@ -259,16 +276,36 @@ interface NoteCardProps {
   note: Note;
   onUpdate: (id: string, title: string, content: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onTogglePinned: (id: string, isPinned: boolean) => Promise<void>;
   onTagClick: (tag: string) => void;
   activeTag: string | null;
+  isPinning: boolean;
+  openViewerRequest: boolean;
+  onOpenViewerRequestHandled: () => void;
+  editRequest: boolean;
+  onEditRequestHandled: () => void;
+  deleteRequest: boolean;
+  onDeleteRequestHandled: () => void;
+  isNewlyCreated?: boolean;
+  onOpenContextMenu: (x: number, y: number) => void;
 }
 
 function NoteCard({
   note,
   onUpdate,
   onDelete,
+  onTogglePinned,
   onTagClick,
   activeTag,
+  isPinning,
+  openViewerRequest,
+  onOpenViewerRequestHandled,
+  editRequest,
+  onEditRequestHandled,
+  deleteRequest,
+  onDeleteRequestHandled,
+  isNewlyCreated = false,
+  onOpenContextMenu,
 }: NoteCardProps) {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(note.title);
@@ -279,6 +316,7 @@ function NoteCard({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isEditing = editing && !viewerOpen;
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -295,6 +333,19 @@ function NoteCard({
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [draft, editing]);
+
+  useEffect(() => {
+    if (!editRequest) return;
+    const frame = window.requestAnimationFrame(() => {
+      setDraftTitle(note.title);
+      setDraft(note.content);
+      setEditing(true);
+      setViewerOpen(true);
+      onEditRequestHandled();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [editRequest, note.content, note.title, onEditRequestHandled]);
 
   const tags = extractHashtags(note.content);
   const contentBlocks = useMemo(
@@ -319,6 +370,8 @@ function NoteCard({
       (draftTitle.trim() === note.title && draft.trim() === note.content)
     ) {
       setEditing(false);
+      setViewerOpen(false);
+      onEditRequestHandled();
       setDraftTitle(note.title);
       setDraft(note.content);
       return;
@@ -329,12 +382,16 @@ function NoteCard({
     } finally {
       setSaving(false);
       setEditing(false);
+      setViewerOpen(false);
+      onEditRequestHandled();
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
       setEditing(false);
+      setViewerOpen(false);
+      onEditRequestHandled();
       setDraftTitle(note.title);
       setDraft(note.content);
     }
@@ -369,6 +426,8 @@ function NoteCard({
   };
 
   const handleDelete = async () => {
+    setConfirmDeleteOpen(false);
+    onDeleteRequestHandled();
     setDeleting(true);
     try {
       await onDelete(note.id);
@@ -383,54 +442,129 @@ function NoteCard({
   };
 
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (editing || isNoteCardControl(event.target)) return;
+    if (isNoteCardControl(event.target)) return;
     setViewerOpen(true);
+  };
+
+  const closeViewer = () => {
+    setViewerOpen(false);
+    onOpenViewerRequestHandled();
+  };
+
+  const startEditingFromViewer = () => {
+    setDraftTitle(note.title);
+    setDraft(note.content);
+    setEditing(true);
+    setViewerOpen(true);
+  };
+
+  const requestDeleteFromViewer = () => {
+    closeViewer();
+    setConfirmDeleteOpen(true);
   };
 
   /* highlight #tags inside content */
   function renderContent(text: string) {
-    const parts = text.split(/(https?:\/\/[^\s<>"']+|#[\w\u00C0-\u024F]+)/g);
-    return parts.map((part, i) => {
-      if (/^https?:\/\//i.test(part)) {
-        const { url, trailingPunctuation } = splitUrlTrailingPunctuation(part);
-        return (
-          <span key={i}>
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              className="font-medium text-violet-600 underline decoration-violet-400/60 underline-offset-2 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-200"
+    const renderPlainContent = (value: string, keyPrefix: string) => {
+      const parts = value.split(
+        /(https?:\/\/[^\s<>"']+|#[\w\u00C0-\u024F]+)/g,
+      );
+
+      return parts.map((part, index) => {
+        const key = `${keyPrefix}-${index}`;
+        if (/^https?:\/\//i.test(part)) {
+          const { url, trailingPunctuation } =
+            splitUrlTrailingPunctuation(part);
+          return (
+            <span key={key}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className="font-medium text-violet-600 underline decoration-violet-400/60 underline-offset-2 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-200"
+              >
+                {url}
+              </a>
+              {trailingPunctuation}
+            </span>
+          );
+        }
+
+        if (/^#[\w\u00C0-\u024F]+$/.test(part)) {
+          const isActive = activeTag === part.toLowerCase();
+          return (
+            <span
+              key={key}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTagClick(part.toLowerCase());
+              }}
+              className={[
+                "cursor-pointer font-semibold transition-colors",
+                isActive
+                  ? "text-violet-600 dark:text-violet-400"
+                  : "text-violet-500 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300",
+              ].join(" ")}
             >
-              {url}
-            </a>
-            {trailingPunctuation}
-          </span>
+              {part}
+            </span>
+          );
+        }
+        return <span key={key}>{part}</span>;
+      });
+    };
+
+    const shortcutPattern = /(^|\n)([^<>\n]+?)\s*>\s*((?:https?:\/\/|www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?:[/?#][^\s<>]*)?)(?=\s|$)/gim;
+    const rendered: ReactNode[] = [];
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+    let shortcutIndex = 0;
+
+    while ((match = shortcutPattern.exec(text))) {
+      const leadingLength = match[1]?.length ?? 0;
+      const labelStart = match.index + leadingLength;
+      const prefix = text.slice(cursor, labelStart);
+      if (prefix) {
+        rendered.push(
+          <Fragment key={`shortcut-prefix-${shortcutIndex}`}>
+            {renderPlainContent(prefix, `shortcut-prefix-${shortcutIndex}`)}
+          </Fragment>,
         );
       }
 
-      if (/^#[\w\u00C0-\u024F]+$/.test(part)) {
-        const isActive = activeTag === part.toLowerCase();
-        return (
-          <span
-            key={i}
-            onClick={(event) => {
-              event.stopPropagation();
-              onTagClick(part.toLowerCase());
-            }}
-            className={[
-              "cursor-pointer font-semibold transition-colors",
-              isActive
-                ? "text-violet-600 dark:text-violet-400"
-                : "text-violet-500 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300",
-            ].join(" ")}
+      const label = match[2].trim();
+      const { url, trailingPunctuation } = splitUrlTrailingPunctuation(
+        match[3],
+      );
+      rendered.push(
+        <span key={`shortcut-${shortcutIndex}`}>
+          <a
+            href={normalizeShortcutUrl(url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="font-medium text-violet-600 underline decoration-violet-400/60 underline-offset-2 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-200"
           >
-            {part}
-          </span>
-        );
-      }
-      return <span key={i}>{part}</span>;
-    });
+            {label}
+          </a>
+          {trailingPunctuation}
+        </span>,
+      );
+      cursor = shortcutPattern.lastIndex;
+      shortcutIndex += 1;
+    }
+
+    const remaining = text.slice(cursor);
+    if (remaining || rendered.length === 0) {
+      rendered.push(
+        <Fragment key="shortcut-remaining">
+          {renderPlainContent(remaining, "shortcut-remaining")}
+        </Fragment>,
+      );
+    }
+
+    return rendered;
   }
 
   function renderNoteContent(full = false) {
@@ -483,14 +617,27 @@ function NoteCard({
 
   return (
     <div
-      data-tilt-card
       className={[
-        "app-list-item-enter group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-shadow hover:shadow-md sm:p-4",
+        "app-note-card app-list-item-enter dashboard-reveal-card group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-[border-color,box-shadow] hover:shadow-md sm:p-4",
         "dark:bg-white/[0.05] dark:border-white/10",
-        editing ? "" : "cursor-pointer",
-        deleting ? "app-item-delete pointer-events-none" : "",
+        isEditing ? "" : "cursor-pointer",
+        isNewlyCreated ? "note-card-created" : "",
+        deleting ? "note-card-deleting pointer-events-none" : "",
       ].join(" ")}
       onClick={handleCardClick}
+      onContextMenu={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest(
+            "input, textarea, select, [contenteditable='true']",
+          )
+        ) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenContextMenu(event.clientX, event.clientY);
+      }}
     >
       {/* actions */}
       <div className="-mr-1 -mt-1 mb-1 flex items-center justify-end gap-1 opacity-100 transition-opacity sm:absolute sm:right-3 sm:top-3 sm:m-0 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
@@ -515,31 +662,60 @@ function NoteCard({
             className="size-11 rounded-xl text-slate-500 hover:text-slate-700 sm:size-7 sm:text-slate-400 dark:hover:text-white"
             aria-label="Editar anotação"
             title="Editar anotação"
-            onClick={() => {
-              setDraftTitle(note.title);
-              setDraft(note.content);
-              setEditing(true);
-            }}
+            onClick={startEditingFromViewer}
           >
             <Pencil className="size-3.5" />
           </Button>
         )}
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-11 rounded-xl text-slate-500 hover:text-red-500 sm:size-7 sm:text-slate-400"
-          aria-label="Excluir anotação"
-          title="Excluir anotação"
-          onClick={() => setConfirmDeleteOpen(true)}
-          disabled={deleting}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
+        {!editing && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className={[
+              "size-11 rounded-xl sm:size-7",
+              note.is_pinned
+                ? "text-violet-500 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-200"
+                : "text-slate-500 hover:text-violet-600 sm:text-slate-400 dark:hover:text-violet-300",
+            ].join(" ")}
+            aria-label={
+              note.is_pinned
+                ? "Desafixar anota\u00e7\u00e3o"
+                : "Fixar anota\u00e7\u00e3o"
+            }
+            title={note.is_pinned ? "Desafixar" : "Fixar"}
+            onClick={() => onTogglePinned(note.id, !note.is_pinned)}
+            disabled={isPinning}
+          >
+            {isPinning ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Pin
+                className={
+                  note.is_pinned ? "size-3.5 fill-current" : "size-3.5"
+                }
+              />
+            )}
+          </Button>
+        )}
+        {!editing && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-11 rounded-xl text-slate-500 hover:text-red-500 sm:size-7 sm:text-slate-400"
+            aria-label="Excluir anotação"
+            title="Excluir anotação"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={deleting}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
       </div>
 
       {/* body */}
-      {editing ? (
+      {isEditing ? (
         <div className="space-y-2">
           <Input
             value={draftTitle}
@@ -581,6 +757,7 @@ function NoteCard({
               disabled={saving}
               onClick={() => {
                 setEditing(false);
+                onEditRequestHandled();
                 setDraftTitle(note.title);
                 setDraft(note.content);
               }}
@@ -614,7 +791,7 @@ function NoteCard({
         </div>
       )}
 
-      {!editing && tags.length > 0 ? (
+      {!isEditing && tags.length > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {tags.map((tag) => (
             <TagChip
@@ -628,12 +805,26 @@ function NoteCard({
       ) : null}
 
       <Dialog
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
+        open={viewerOpen || openViewerRequest}
+        onOpenChange={(open) => {
+          setViewerOpen(open);
+          if (!open) {
+            setEditing(false);
+            setDraftTitle(note.title);
+            setDraft(note.content);
+          }
+          if (!open) onOpenViewerRequestHandled();
+        }}
         disablePointerDismissal
       >
         <DialogContent
-          onBackdropClick={() => setViewerOpen(false)}
+          onBackdropClick={() => {
+            setViewerOpen(false);
+            setEditing(false);
+            setDraftTitle(note.title);
+            setDraft(note.content);
+            onOpenViewerRequestHandled();
+          }}
           className={[
             "grid grid-rows-[auto_minmax(0,1fr)] gap-3 bg-white dark:bg-zinc-950",
             useFullscreenViewer
@@ -643,7 +834,9 @@ function NoteCard({
         >
           <div className="flex min-w-0 items-start gap-3 pr-8">
             <div className="min-w-0">
-              <DialogTitle>{note.title}</DialogTitle>
+              <DialogTitle>
+                {editing ? "Editar anotação" : note.title}
+              </DialogTitle>
               <DialogDescription className="mt-1">
                 Criada em {formatDateTime(note.created_at)}
                 {hasBeenUpdated(note)
@@ -651,26 +844,137 @@ function NoteCard({
                   : ""}
               </DialogDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={handleCopy}
-            >
-              <Copy className="size-3.5" />
-              {copied ? "Copiado" : "Copiar"}
-            </Button>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={copied ? "Anotação copiada" : "Copiar anotação"}
+                title={copied ? "Copiado" : "Copiar anotação"}
+                onClick={handleCopy}
+              >
+                <Copy className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Editar anotação"
+                title="Editar anotação"
+                onClick={startEditingFromViewer}
+                className={editing ? "hidden" : ""}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={note.is_pinned ? "Desafixar anotação" : "Fixar anotação"}
+                title={note.is_pinned ? "Desafixar anotação" : "Fixar anotação"}
+                onClick={() => void onTogglePinned(note.id, !note.is_pinned)}
+                disabled={isPinning}
+                className={note.is_pinned ? "text-violet-600 dark:text-violet-300" : ""}
+              >
+                {isPinning ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Pin
+                    className={note.is_pinned ? "size-3.5 fill-current" : "size-3.5"}
+                  />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Excluir anotação"
+                title="Excluir anotação"
+                onClick={requestDeleteFromViewer}
+                disabled={deleting}
+                className={
+                  editing
+                    ? "hidden"
+                    : "text-rose-500 hover:text-rose-600 dark:text-rose-400"
+                }
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
           </div>
-          <div className="min-h-0 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="space-y-3">{renderNoteContent(true)}</div>
-          </div>
+          {editing ? (
+            <div className="min-h-0 overflow-auto rounded-xl border border-violet-300 bg-slate-50 p-3 dark:border-violet-400/70 dark:bg-white/[0.04]">
+              <div className="space-y-3">
+                <Input
+                  value={draftTitle}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  disabled={saving}
+                  maxLength={160}
+                  placeholder="Título da anotação"
+                  className="h-11 rounded-xl border-violet-300 bg-white text-base font-semibold focus-visible:ring-violet-400 dark:border-white/20 dark:bg-white/10"
+                />
+                <Textarea
+                  ref={textareaRef}
+                  value={draft}
+                  disabled={saving}
+                  onChange={handleEditDraftChange}
+                  onKeyDown={handleKeyDown}
+                  className="min-h-40 resize-none rounded-xl border-violet-300 bg-white text-base focus-visible:ring-violet-400 dark:border-white/20 dark:bg-white/10"
+                  rows={8}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-10 gap-1.5 rounded-full bg-violet-600 px-4 text-white hover:bg-violet-700"
+                    onClick={() => void handleSave()}
+                    disabled={saving || !draftTitle.trim() || !draft.trim()}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Salvando…
+                      </>
+                    ) : (
+                      "Salvar"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-10 rounded-full px-4"
+                    disabled={saving}
+                    onClick={() => {
+                      setEditing(false);
+                      setViewerOpen(false);
+                      onEditRequestHandled();
+                      setDraftTitle(note.title);
+                      setDraft(note.content);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <span className="ml-auto hidden text-xs text-slate-400 sm:inline">
+                    Ctrl+Enter para salvar · Esc para cancelar
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-0 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="space-y-3">{renderNoteContent(true)}</div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
       <ConfirmDialog
-        open={confirmDeleteOpen}
-        onOpenChange={setConfirmDeleteOpen}
+        open={confirmDeleteOpen || deleteRequest}
+        onOpenChange={(open) => {
+          setConfirmDeleteOpen(open);
+          if (!open) onDeleteRequestHandled();
+        }}
         title="Excluir anotação"
         description={`Tem certeza que deseja excluir "${note.title}"? Essa ação não pode ser desfeita.`}
         confirmLabel="Excluir"
@@ -687,6 +991,12 @@ interface NotesPanelProps {
   initialNotes: Note[];
 }
 
+interface NoteContextMenuState {
+  noteId: string;
+  x: number;
+  y: number;
+}
+
 export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [titleDraft, setTitleDraft] = useState("");
@@ -697,8 +1007,32 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const [pinnedViewerNoteId, setPinnedViewerNoteId] = useState<string | null>(
+    null,
+  );
+  const [noteContextMenu, setNoteContextMenu] =
+    useState<NoteContextMenuState | null>(null);
+  const [noteEditRequestId, setNoteEditRequestId] = useState<string | null>(
+    null,
+  );
+  const [noteDeleteRequestId, setNoteDeleteRequestId] = useState<string | null>(
+    null,
+  );
+  const [newlyCreatedNoteId, setNewlyCreatedNoteId] = useState<string | null>(
+    null,
+  );
+  const newNoteTimeoutRef = useRef<number | null>(null);
   const toast = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (newNoteTimeoutRef.current !== null) {
+        window.clearTimeout(newNoteTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /* auto-grow compose textarea */
   useEffect(() => {
@@ -739,6 +1073,18 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     return result;
   }, [notes, activeTag, search, createdFrom, createdTo]);
 
+  const pinnedNotes = useMemo(
+    () =>
+      notes
+        .filter((note) => note.is_pinned)
+        .sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() -
+            new Date(a.updated_at).getTime(),
+        ),
+    [notes],
+  );
+
   const handleCreate = async () => {
     const title = titleDraft.trim();
     const content = draft.trim();
@@ -755,6 +1101,14 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       if (!res.ok || !data.note)
         throw new Error(data.error ?? "Erro ao salvar.");
       setNotes((prev) => [data.note as Note, ...prev]);
+      setNewlyCreatedNoteId(data.note.id);
+      if (newNoteTimeoutRef.current !== null) {
+        window.clearTimeout(newNoteTimeoutRef.current);
+      }
+      newNoteTimeoutRef.current = window.setTimeout(() => {
+        setNewlyCreatedNoteId(null);
+        newNoteTimeoutRef.current = null;
+      }, 2200);
       setTitleDraft("");
       setDraft("");
       toast.success("Anotação criada!");
@@ -799,8 +1153,9 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           const data = (await res.json()) as { error?: string };
           throw new Error(data.error ?? "Erro ao excluir.");
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 280));
+        await new Promise((resolve) => window.setTimeout(resolve, 680));
         setNotes((prev) => prev.filter((n) => n.id !== id));
+        setNoteDeleteRequestId((current) => (current === id ? null : current));
         toast.success("Anotação excluída!");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Erro ao excluir.";
@@ -811,9 +1166,71 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     [toast],
   );
 
+  const handleTogglePinned = useCallback(
+    async (id: string, isPinned: boolean) => {
+      setPinningId(id);
+      try {
+        const res = await fetch(`/api/notes/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_pinned: isPinned }),
+        });
+        const data = (await res.json()) as { note?: Note; error?: string };
+        if (!res.ok || !data.note) {
+          throw new Error(data.error ?? "Erro ao atualizar fixa\u00e7\u00e3o.");
+        }
+        setNotes((prev) =>
+          prev.map((note) => (note.id === id ? (data.note as Note) : note)),
+        );
+        toast.success(
+          isPinned ? "Anota\u00e7\u00e3o fixada!" : "Anota\u00e7\u00e3o desafixada!",
+        );
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message
+            : "Erro ao atualizar fixa\u00e7\u00e3o.";
+        toast.error(msg);
+      } finally {
+        setPinningId(null);
+      }
+    },
+    [toast],
+  );
+
   const handleTagClick = useCallback((tag: string) => {
     setActiveTag((prev) => (prev === tag ? null : tag));
   }, []);
+
+  const contextMenuNote = noteContextMenu
+    ? notes.find((note) => note.id === noteContextMenu.noteId) ?? null
+    : null;
+  const noteContextMenuActions: ContextMenuAction[] = contextMenuNote
+    ? [
+        {
+          label: "Editar anota\u00e7\u00e3o",
+          icon: Pencil,
+          onSelect: () => setNoteEditRequestId(contextMenuNote.id),
+        },
+        {
+          label: "Excluir anota\u00e7\u00e3o",
+          icon: Trash2,
+          destructive: true,
+          onSelect: () => setNoteDeleteRequestId(contextMenuNote.id),
+        },
+        {
+          label: contextMenuNote.is_pinned
+            ? "Desafixar anota\u00e7\u00e3o"
+            : "Fixar anota\u00e7\u00e3o",
+          icon: Pin,
+          onSelect: () =>
+            void handleTogglePinned(
+              contextMenuNote.id,
+              !contextMenuNote.is_pinned,
+            ),
+        },
+      ]
+    : [];
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -845,9 +1262,9 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   };
 
   return (
-    <div className="min-w-0 space-y-4 sm:space-y-5">
+    <div className="dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
       {/* compose */}
-      <div className="app-panel-enter min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
+      <div className="app-panel-enter dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/70 p-3 shadow-sm backdrop-blur sm:p-4 dark:border-white/10 dark:bg-white/[0.05]">
         <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-white/40">
           <StickyNote className="size-3.5" />
           Nova anotação
@@ -916,9 +1333,38 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         )}
       </div>
 
+      {pinnedNotes.length > 0 && (
+        <section className="app-pinned-live app-panel-enter dashboard-reveal-panel rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600/80 dark:text-violet-200/60">
+            <Pin className="size-3.5 fill-current" />
+            Fixadas
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {pinnedNotes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                className="group inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-lg border border-violet-300/35 bg-white/50 px-2.5 text-left text-xs font-medium text-slate-700 transition-all hover:-translate-y-0.5 hover:border-violet-400/70 hover:bg-violet-100/70 hover:text-violet-800 hover:shadow-[0_6px_18px_rgba(139,92,246,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-violet-300/20 dark:bg-white/[0.04] dark:text-white/75 dark:hover:border-violet-300/50 dark:hover:bg-violet-400/10 dark:hover:text-violet-100"
+                onClick={() => {
+                  setSearch("");
+                  setActiveTag(null);
+                  setCreatedFrom("");
+                  setCreatedTo("");
+                  setPinnedViewerNoteId(note.id);
+                }}
+                title="Abrir anota\u00e7\u00e3o"
+              >
+                <Pin className="size-3 shrink-0 text-violet-500 transition-transform group-hover:-rotate-12 dark:text-violet-300" />
+                <span className="truncate">{note.title}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* search + tag filters */}
       {notes.length > 0 && (
-        <div className="app-stagger-list space-y-3">
+        <div className="app-stagger-list dashboard-reveal-panel space-y-3">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -1008,7 +1454,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* notes list */}
       {filtered.length === 0 ? (
-        <div className="app-empty-breathe flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
+        <div className="app-empty-breathe dashboard-reveal-panel flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center sm:py-14 dark:border-white/15">
           <StickyNote className="size-8 text-slate-300 dark:text-white/20" />
           <p className="text-sm text-slate-500 dark:text-white/40">
             {notes.length === 0
@@ -1030,12 +1476,33 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
               note={note}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              onTogglePinned={handleTogglePinned}
               onTagClick={handleTagClick}
               activeTag={activeTag}
+              isPinning={pinningId === note.id}
+              openViewerRequest={pinnedViewerNoteId === note.id}
+              onOpenViewerRequestHandled={() => setPinnedViewerNoteId(null)}
+              editRequest={noteEditRequestId === note.id}
+              onEditRequestHandled={() => setNoteEditRequestId(null)}
+              deleteRequest={noteDeleteRequestId === note.id}
+              onDeleteRequestHandled={() => setNoteDeleteRequestId(null)}
+              isNewlyCreated={newlyCreatedNoteId === note.id}
+              onOpenContextMenu={(x, y) =>
+                setNoteContextMenu({ noteId: note.id, x, y })
+              }
             />
           ))}
         </div>
       )}
+
+      {noteContextMenu && contextMenuNote ? (
+        <ContextMenu
+          x={noteContextMenu.x}
+          y={noteContextMenu.y}
+          actions={noteContextMenuActions}
+          onClose={() => setNoteContextMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }

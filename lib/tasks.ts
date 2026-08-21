@@ -237,7 +237,28 @@ export async function createTask(input: CreateTaskInput) {
     throw new Error(error.message);
   }
 
-  return mapTask(data as unknown as Task);
+  const createdTask = data as unknown as Task;
+  const subtaskTitles = (input.subtasks ?? [])
+    .map((title) => title.trim())
+    .filter(Boolean);
+
+  if (subtaskTitles.length) {
+    const { error: subtasksError } = await supabase.from("subtasks").insert(
+      subtaskTitles.map((title) => ({
+        task_id: createdTask.id,
+        title,
+        is_completed: false,
+      })),
+    );
+
+    if (subtasksError) {
+      throw new Error(subtasksError.message);
+    }
+
+    return getTaskById(createdTask.id);
+  }
+
+  return mapTask(createdTask);
 }
 
 export async function updateTask(id: string, input: UpdateTaskInput) {

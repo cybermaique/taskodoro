@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Flag,
   Folder,
+  ListChecks,
   Paperclip,
   Plus,
   X,
@@ -48,6 +49,7 @@ interface TaskFormProps {
     priority?: TaskPriority;
     category?: string | null;
     attachments?: File[];
+    subtasks?: string[];
   }) => Promise<void>;
 }
 
@@ -85,6 +87,8 @@ export function TaskForm({
   const [values, setValues] = useState<TaskFormValues>(EMPTY_VALUES);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtaskDraft, setSubtaskDraft] = useState("");
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
   const successTimeoutRef = useRef<number | null>(null);
@@ -94,7 +98,9 @@ export function TaskForm({
     values.description !== EMPTY_VALUES.description ||
     values.priority !== EMPTY_VALUES.priority ||
     values.category !== EMPTY_VALUES.category ||
-    attachments.length > 0;
+    attachments.length > 0 ||
+    subtasks.length > 0 ||
+    subtaskDraft.trim().length > 0;
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -127,6 +133,29 @@ export function TaskForm({
     if (files.length) addAttachments(files);
   };
 
+  const addSubtask = () => {
+    const title = subtaskDraft.trim();
+    if (!title) return;
+
+    if (subtasks.length >= 20) {
+      setErrorMessage("Você pode adicionar até 20 subtarefas por tarefa.");
+      return;
+    }
+
+    if (
+      subtasks.some(
+        (subtask) => subtask.toLocaleLowerCase() === title.toLocaleLowerCase(),
+      )
+    ) {
+      setErrorMessage("Essa subtarefa já foi adicionada.");
+      return;
+    }
+
+    setSubtasks((current) => [...current, title]);
+    setSubtaskDraft("");
+    setErrorMessage(null);
+  };
+
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const title = values.title.trim();
@@ -139,16 +168,24 @@ export function TaskForm({
     setErrorMessage(null);
 
     try {
+      const pendingSubtask = subtaskDraft.trim();
+      const subtasksToCreate = pendingSubtask
+        ? [...subtasks, pendingSubtask]
+        : subtasks;
+
       await onCreate({
         title,
         description: values.description.trim() || undefined,
         priority: values.priority,
         category: values.category.trim() || null,
         attachments: attachments.length ? attachments : undefined,
+        subtasks: subtasksToCreate.length ? subtasksToCreate : undefined,
       });
 
       setValues(EMPTY_VALUES);
       setAttachments([]);
+      setSubtasks([]);
+      setSubtaskDraft("");
       setJustCreated(true);
       if (successTimeoutRef.current !== null) {
         window.clearTimeout(successTimeoutRef.current);
@@ -169,7 +206,7 @@ export function TaskForm({
   return (
     <section
       className={[
-        "app-panel-enter min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20",
+        "app-panel-enter app-compose-live dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07] dark:shadow-black/20",
         justCreated ? "task-form-success" : "",
       ].join(" ")}
     >
@@ -318,6 +355,83 @@ export function TaskForm({
             />
           ) : null}
         </div>
+
+        <section className="rounded-2xl border border-slate-900/10 bg-slate-950/[0.025] p-3 dark:border-white/10 dark:bg-black/10">
+          <div className="flex items-start gap-2">
+            <ListChecks className="mt-0.5 size-4 shrink-0 text-teal-500" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">
+                Subtarefas <span className="font-normal text-slate-500 dark:text-white/45">(opcional)</span>
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-white/45">
+                Quebre a tarefa em passos menores e já deixe tudo planejado.
+              </p>
+            </div>
+            <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-white/45">
+              {subtasks.length}/20
+            </span>
+          </div>
+
+          {subtasks.length ? (
+            <div className="mt-3 grid gap-2">
+              {subtasks.map((subtask, index) => (
+                <div
+                  key={`${subtask}-${index}`}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-900/10 bg-white/60 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  <span className="size-1.5 shrink-0 rounded-full bg-teal-400" />
+                  <span className="min-w-0 flex-1 break-words">{subtask}</span>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="size-7 shrink-0 rounded-full text-slate-500 hover:text-rose-500 dark:text-white/45 dark:hover:text-rose-300"
+                    disabled={isSubmitting}
+                    onClick={() =>
+                      setSubtasks((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    aria-label={`Remover subtarefa ${subtask}`}
+                    title="Remover subtarefa"
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row">
+            <Input
+              className="h-10 min-w-0 rounded-xl border-slate-900/10 bg-white text-sm shadow-none dark:border-white/10 dark:bg-black/20"
+              placeholder="Ex.: Revisar os anexos"
+              value={subtaskDraft}
+              disabled={isSubmitting || subtasks.length >= 20}
+              maxLength={160}
+              onChange={(event) => {
+                setSubtaskDraft(event.target.value);
+                if (errorMessage) setErrorMessage(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addSubtask();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 shrink-0 rounded-xl px-3"
+              disabled={isSubmitting || !subtaskDraft.trim() || subtasks.length >= 20}
+              onClick={addSubtask}
+            >
+              <Plus className="size-4" />
+              Adicionar passo
+            </Button>
+          </div>
+        </section>
 
         <div
           className={[

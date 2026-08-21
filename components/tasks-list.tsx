@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type Dispatch,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type SetStateAction,
   Fragment,
   useEffect,
@@ -29,6 +30,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ContextMenu,
+  type ContextMenuAction,
+} from "@/components/ui/context-menu";
 import { TaskDescription } from "@/components/task-description";
 import { TaskDropCelebration } from "@/components/task-drop-celebration";
 import { formatCompactDate, formatDateTime } from "@/lib/format";
@@ -58,14 +64,18 @@ import type {
   TaskStatusHistory,
   TaskView,
 } from "@/types/task";
+import type { TaskColumnWidths } from "@/types/profile";
 
 interface TasksListProps {
   tasks: Task[];
+  newlyCreatedTaskId?: string | null;
   busyTaskId: string | null;
   isCompact?: boolean;
+  initialColumnWidths: TaskColumnWidths | null;
+  onColumnWidthsChange?: (widths: TaskColumnWidths) => Promise<void>;
   categorySuggestions: string[];
   onEditDirtyChange?: (isDirty: boolean) => void;
-  onDeleteTask: (taskId: string) => Promise<void>;
+  onDeleteTask: (taskId: string) => Promise<boolean>;
   onUpdateTask: (
     taskId: string,
     payload: Record<string, unknown>,
@@ -89,6 +99,12 @@ interface EditingState {
   description: string;
   category: string;
   priority: TaskPriority;
+}
+
+interface TaskContextMenuState {
+  taskId: string;
+  x: number;
+  y: number;
 }
 
 function getPriorityLabel(priority: TaskPriority) {
@@ -168,7 +184,7 @@ function TaskHistoryTimeline({
     <ol
       className={[
         "space-y-2.5 pl-1",
-        compact ? "max-h-44 overflow-y-auto pr-1" : "",
+        compact ? "pr-1" : "",
       ].join(" ")}
     >
       {history.map((event, index) => (
@@ -205,26 +221,209 @@ function TaskHistoryTimeline({
   );
 }
 
-function TaskHistoryTooltip({ task }: { task: Task }) {
+function TaskCreationDate({ task }: { task: Task }) {
   return (
-    <div className="group/task-history relative z-10 inline-flex min-w-0">
+    <span
+      className="inline-flex items-center gap-1 text-[0.65rem] font-medium text-slate-500/80 dark:text-white/40"
+      aria-label={`Criada em ${formatCompactDate(task.created_at)}`}
+    >
+      <CalendarDays className="size-3" />
+      {formatCompactDate(task.created_at)}
+    </span>
+  );
+}
+
+function TaskCardAction({
+  label,
+  onClick,
+  children,
+  destructive = false,
+  disabled = false,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+  destructive?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      data-task-action="true"
+      draggable={false}
+      className="group/task-action relative size-11 shrink-0 cursor-pointer sm:size-8"
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
+      onDragStart={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        data-task-action="true"
+        aria-label={label}
+        title={label}
+        disabled={disabled}
+        draggable={false}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
+        onDragStart={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClick();
+        }}
+        className={[
+          "size-full rounded-full text-slate-500 transition-colors hover:text-slate-700 sm:text-slate-400 dark:hover:text-white",
+          destructive
+            ? "hover:text-rose-500 dark:hover:text-rose-300"
+            : "hover:text-teal-600 dark:hover:text-teal-300",
+        ].join(" ")}
+      >
+        {children}
+      </Button>
       <span
-        className="inline-flex items-center gap-1 text-[0.65rem] font-medium text-slate-500/80 dark:text-white/40"
-        aria-label={`Criada em ${formatCompactDate(task.created_at)}`}
-      >
-        <CalendarDays className="size-3" />
-        {formatCompactDate(task.created_at)}
-      </span>
-      <div
         role="tooltip"
-        className="pointer-events-none invisible absolute bottom-full left-1 z-50 mb-2 w-[min(16rem,calc(100vw-1.5rem))] translate-y-1 rounded-2xl border border-slate-900/10 bg-white/95 p-3 text-slate-700 opacity-0 shadow-xl backdrop-blur-xl transition-all duration-200 group-hover/task-card:pointer-events-auto group-hover/task-card:visible group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-hover/task-history:pointer-events-auto group-hover/task-history:visible group-hover/task-history:translate-y-0 group-hover/task-history:opacity-100 dark:border-white/10 dark:bg-zinc-950/95 dark:text-white"
+        className="pointer-events-none invisible absolute right-0 top-full z-[60] mt-1 whitespace-nowrap rounded-lg border border-slate-900/10 bg-white/95 px-2 py-1 text-[0.68rem] font-semibold text-slate-700 opacity-0 shadow-lg backdrop-blur transition-all duration-150 group-hover/task-action:visible group-hover/task-action:translate-y-0 group-hover/task-action:opacity-100 dark:border-white/10 dark:bg-zinc-950/95 dark:text-white/85"
       >
-        <div className="mb-2 flex items-center gap-1.5 text-[0.68rem] font-bold uppercase tracking-wide text-slate-500 dark:text-white/50">
-          <History className="size-3.5 text-teal-500" />
-          Histórico da tarefa
-        </div>
-        <TaskHistoryTimeline task={task} compact />
-      </div>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function TaskHistoryAction({
+  task,
+  onClick,
+}: {
+  task: Task;
+  onClick: () => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ left: 8, top: 8 });
+
+  useEffect(() => {
+    if (!tooltipOpen) return;
+
+    const updateTooltipPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const triggerRect = trigger.getBoundingClientRect();
+      const tooltipWidth =
+        tooltipRef.current?.offsetWidth ?? Math.min(384, window.innerWidth - 16);
+      const tooltipHeight =
+        tooltipRef.current?.offsetHeight ?? Math.min(480, window.innerHeight - 16);
+      const maxLeft = Math.max(8, window.innerWidth - tooltipWidth - 8);
+      const left = Math.min(
+        Math.max(8, triggerRect.right - tooltipWidth),
+        maxLeft,
+      );
+      const gap = 10;
+      let top = triggerRect.top - tooltipHeight - gap;
+
+      if (top < 8) {
+        top = triggerRect.bottom + gap;
+      }
+
+      if (top + tooltipHeight > window.innerHeight - 8) {
+        top = Math.max(8, window.innerHeight - tooltipHeight - 8);
+      }
+
+      setTooltipPosition({ left, top });
+    };
+
+    const frame = window.requestAnimationFrame(updateTooltipPosition);
+    window.addEventListener("resize", updateTooltipPosition);
+    window.addEventListener("scroll", updateTooltipPosition, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateTooltipPosition);
+      window.removeEventListener("scroll", updateTooltipPosition, true);
+    };
+  }, [tooltipOpen]);
+
+  const tooltip = tooltipOpen
+    ? createPortal(
+        <div
+          ref={tooltipRef}
+          id={`task-history-${task.id}`}
+          role="tooltip"
+          style={{ left: tooltipPosition.left, top: tooltipPosition.top }}
+          className="pointer-events-none fixed z-[100] max-h-[calc(100dvh-1rem)] w-[min(24rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-2xl border border-slate-900/10 bg-white/95 p-4 text-slate-700 opacity-100 shadow-2xl backdrop-blur-xl transition-opacity duration-150 dark:border-white/10 dark:bg-zinc-950/95 dark:text-white"
+        >
+          <div className="mb-2 flex items-center gap-1.5 text-[0.68rem] font-bold uppercase tracking-wide text-slate-500 dark:text-white/50">
+            <History className="size-3.5 text-teal-500" />
+            Histórico da tarefa
+          </div>
+          <TaskHistoryTimeline task={task} compact />
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <div
+      data-task-action="true"
+      draggable={false}
+      className="relative size-11 shrink-0 cursor-pointer sm:size-8"
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
+      onDragStart={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Button
+        ref={triggerRef}
+        type="button"
+        size="icon"
+        variant="ghost"
+        data-task-action="true"
+        aria-label="Ver histórico"
+        aria-describedby={tooltipOpen ? `task-history-${task.id}` : undefined}
+        title="Ver histórico"
+        draggable={false}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
+        onDragStart={(event) => event.preventDefault()}
+        onMouseEnter={() => setTooltipOpen(true)}
+        onMouseLeave={() => setTooltipOpen(false)}
+        onFocus={() => setTooltipOpen(true)}
+        onBlur={() => setTooltipOpen(false)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClick();
+        }}
+        className="size-full rounded-full text-slate-500 transition-colors hover:text-teal-600 sm:text-slate-400 dark:hover:text-teal-300"
+      >
+        <History className="size-3.5" />
+      </Button>
+      {tooltip}
     </div>
   );
 }
@@ -251,11 +450,8 @@ const taskCardBorderStyles: Record<TaskSection, string> = {
 };
 
 const taskOrderStorageKey = "taskboard_task_order";
-const taskColumnWidthsStorageKey = "taskboard_task_column_widths";
 const minTaskColumnWidth = 208;
 const maxTaskColumnWidth = 704;
-
-type TaskColumnWidths = Record<TaskSection, number>;
 
 interface ColumnResizeState {
   pointerId: number;
@@ -318,43 +514,13 @@ function saveTaskOrder(order: string[]) {
   window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
 }
 
-function readStoredTaskColumnWidths(): TaskColumnWidths | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const stored = window.localStorage.getItem(taskColumnWidthsStorageKey);
-    const parsed = stored ? (JSON.parse(stored) as unknown) : null;
-
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      !taskSectionOrder.every(
-        (section) =>
-          typeof (parsed as Record<string, unknown>)[section] === "number" &&
-          Number.isFinite((parsed as Record<string, number>)[section]) &&
-          (parsed as Record<string, number>)[section] > 0,
-      )
-    ) {
-      return null;
-    }
-
-    return parsed as TaskColumnWidths;
-  } catch {
-    window.localStorage.removeItem(taskColumnWidthsStorageKey);
-    return null;
-  }
-}
-
-function saveTaskColumnWidths(widths: TaskColumnWidths) {
-  window.localStorage.setItem(taskColumnWidthsStorageKey, JSON.stringify(widths));
-}
-
 export function TasksList({
   tasks,
+  newlyCreatedTaskId = null,
   busyTaskId,
   isCompact = false,
+  initialColumnWidths,
+  onColumnWidthsChange,
   categorySuggestions,
   onEditDirtyChange,
   onDeleteTask,
@@ -379,15 +545,17 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [dropCelebration, setDropCelebration] =
     useState<DropCelebration | null>(null);
   const [taskColumnWidths, setTaskColumnWidths] =
-    useState<TaskColumnWidths | null>(null);
+    useState<TaskColumnWidths | null>(initialColumnWidths);
   const [canResizeColumns, setCanResizeColumns] = useState(false);
   const [resizingDividerIndex, setResizingDividerIndex] = useState<number | null>(
     null,
   );
   const [detailsTaskId, setDetailsTaskId] = useState<string | null>(null);
+  const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
   const [attachmentViewer, setAttachmentViewer] = useState<{
     task: Task;
     index: number;
@@ -401,7 +569,10 @@ export function TasksList({
     title: string;
   } | null>(null);
   const [deletingConfirm, setDeletingConfirm] = useState(false);
+  const [taskContextMenu, setTaskContextMenu] =
+    useState<TaskContextMenuState | null>(null);
   const columnRefs = useRef<Partial<Record<TaskSection, HTMLElement | null>>>({});
+  const taskColumnWidthsRef = useRef<TaskColumnWidths | null>(initialColumnWidths);
   const resizeStateRef = useRef<ColumnResizeState | null>(null);
   const dropCelebrationTimeoutRef = useRef<number | null>(null);
   const dropCelebrationSequenceRef = useRef(0);
@@ -491,17 +662,12 @@ export function TasksList({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setTaskColumnWidths(readStoredTaskColumnWidths());
+      taskColumnWidthsRef.current = initialColumnWidths;
+      setTaskColumnWidths(initialColumnWidths);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  useEffect(() => {
-    if (taskColumnWidths) {
-      saveTaskColumnWidths(taskColumnWidths);
-    }
-  }, [taskColumnWidths]);
+  }, [initialColumnWidths]);
 
   const normalizedTaskOrder = useMemo(
     () => normalizeTaskOrder(taskOrder, tasks),
@@ -550,6 +716,10 @@ export function TasksList({
 
   const filteredTasks = useMemo(() => {
     return orderedTasks.filter((task) => {
+      if (task.id === newlyCreatedTaskId) {
+        return true;
+      }
+
       if (viewFilter === "work" && task.category !== "trabalho") {
         return false;
       }
@@ -595,6 +765,7 @@ export function TasksList({
     priorityFilter,
     search,
     viewFilter,
+    newlyCreatedTaskId,
   ]);
 
   const groupedTasks = useMemo(() => {
@@ -688,6 +859,14 @@ export function TasksList({
   };
 
   const handleDragStart = (event: DragEvent<HTMLElement>, taskId: string) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("[data-task-action='true']")
+    ) {
+      event.preventDefault();
+      return;
+    }
+
     setDraggingTaskId(taskId);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", taskId);
@@ -697,6 +876,50 @@ export function TasksList({
     setDraggingTaskId(null);
     setDragOverTaskId(null);
   };
+
+  const openTaskContextMenu = (
+    event: React.MouseEvent<HTMLLIElement>,
+    task: Task,
+  ) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("input, textarea, select, [contenteditable='true']")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (editingTaskId === task.id) return;
+    setTaskContextMenu({ taskId: task.id, x: event.clientX, y: event.clientY });
+  };
+
+  const contextMenuTask = taskContextMenu
+    ? tasks.find((task) => task.id === taskContextMenu.taskId) ?? null
+    : null;
+  const historyTask = historyTaskId
+    ? tasks.find((task) => task.id === historyTaskId) ?? null
+    : null;
+  const taskContextMenuActions: ContextMenuAction[] = contextMenuTask
+    ? [
+        {
+          label: "Editar tarefa",
+          icon: Pencil,
+          disabled: busyTaskId === contextMenuTask.id,
+          onSelect: () => startEdit(contextMenuTask),
+        },
+        {
+          label: "Excluir tarefa",
+          icon: Trash2,
+          destructive: true,
+          disabled: busyTaskId === contextMenuTask.id,
+          onSelect: () =>
+            setConfirmDeleteTask({
+              id: contextMenuTask.id,
+              title: contextMenuTask.title,
+            }),
+        },
+      ]
+    : [];
 
   const celebrateDrop = (
     taskId: string,
@@ -747,12 +970,19 @@ export function TasksList({
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
       const targetTask = tasks.find((task) => task.id === targetTaskId);
-      if (taskToMove && targetTask && taskToMove.status !== targetTask.status) {
-        const wasUpdated = await onUpdateTask(taskId, {
-          status: targetTask.status,
-        });
-        if (!wasUpdated) return;
+      if (
+        !taskToMove ||
+        !targetTask ||
+        taskToMove.status === targetTask.status
+      ) {
+        return;
       }
+
+      const wasUpdated = await onUpdateTask(taskId, {
+        status: targetTask.status,
+      });
+      if (!wasUpdated) return;
+
       moveTaskBefore(taskId, targetTaskId);
       celebrateDrop(
         taskId,
@@ -777,10 +1007,13 @@ export function TasksList({
 
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
-      if (taskToMove && taskToMove.status !== status) {
-        const wasUpdated = await onUpdateTask(taskId, { status });
-        if (!wasUpdated) return;
+      if (!taskToMove || taskToMove.status === status) {
+        return;
       }
+
+      const wasUpdated = await onUpdateTask(taskId, { status });
+      if (!wasUpdated) return;
+
       moveTaskToEnd(taskId);
       celebrateDrop(
         taskId,
@@ -829,6 +1062,7 @@ export function TasksList({
       startRightWidth: measuredWidths[rightSection],
       startWidths: measuredWidths,
     };
+    taskColumnWidthsRef.current = measuredWidths;
     setTaskColumnWidths(measuredWidths);
     setResizingDividerIndex(dividerIndex);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -852,11 +1086,13 @@ export function TasksList({
     const requestedDelta = event.clientX - resizeState.startX;
     const delta = Math.min(Math.max(requestedDelta, minDelta), maxDelta);
 
-    setTaskColumnWidths({
+    const nextWidths = {
       ...resizeState.startWidths,
       [resizeState.leftSection]: resizeState.startLeftWidth + delta,
       [resizeState.rightSection]: resizeState.startRightWidth - delta,
-    });
+    };
+    taskColumnWidthsRef.current = nextWidths;
+    setTaskColumnWidths(nextWidths);
   };
 
   const stopColumnResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -867,13 +1103,17 @@ export function TasksList({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    const finalWidths = taskColumnWidthsRef.current;
+    if (finalWidths && onColumnWidthsChange) {
+      void onColumnWidthsChange(finalWidths);
+    }
     resizeStateRef.current = null;
     setResizingDividerIndex(null);
   };
 
   return (
-    <section className="min-w-0 space-y-4">
-      <div className="min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
+    <section className="dashboard-reveal-board min-w-0 space-y-4">
+      <div className="dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">Tarefas</h2>
@@ -910,7 +1150,7 @@ export function TasksList({
               : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.9fr]"
           }
         >
-          <label className="relative min-w-0">
+          <label className="app-live-search relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
@@ -969,7 +1209,7 @@ export function TasksList({
       </div>
 
       {filteredTasks.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-900/15 bg-white/55 p-6 text-center shadow-sm sm:rounded-3xl sm:p-10 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="app-empty-signal dashboard-reveal-panel rounded-2xl border border-dashed border-slate-900/15 bg-white/55 p-6 text-center shadow-sm sm:rounded-3xl sm:p-10 dark:border-white/10 dark:bg-white/[0.04]">
           <CirclePlus className="mx-auto size-8 text-slate-400" />
           <p className="mt-3 font-medium">Nada por aqui nesta vista.</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
@@ -977,7 +1217,7 @@ export function TasksList({
           </p>
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 items-start gap-4 pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0">
+        <div className="dashboard-reveal-columns grid min-w-0 grid-cols-1 items-start gap-4 pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0">
           {taskSectionOrder.map((section, index) => {
             const tasksByBucket = groupedTasks[section];
 
@@ -995,7 +1235,7 @@ export function TasksList({
                         }
                       : undefined
                   }
-                  className="flex min-w-0 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1"
+                  className="dashboard-reveal-column app-column-live flex min-w-0 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1"
                 >
                 <div className="mb-3 flex items-center gap-2 px-1">
                   <span
@@ -1048,16 +1288,21 @@ export function TasksList({
                             const target = event.target;
                             if (
                               target instanceof Element &&
-                              target.closest("button, input, textarea, [role=combobox]")
+                              target.closest(
+                                "[data-task-action='true'], button, input, textarea, [role=combobox]",
+                              )
                             ) {
                               return;
                             }
                             setDetailsTaskId(task.id);
                           }}
+                          onContextMenu={(event) =>
+                            openTaskContextMenu(event, task)
+                          }
                           onDragOver={(event) => handleDragOver(event, task.id)}
                           onDrop={(event) => handleDropOnTask(event, task.id)}
                           className={[
-                            "app-list-item-enter group group/task-card flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
+                            "app-list-item-enter dashboard-reveal-card group group/task-card relative flex min-w-0 cursor-grab select-none flex-col border bg-white/85 shadow-sm shadow-slate-950/5 transition duration-200 active:cursor-grabbing sm:hover:-translate-y-0.5 sm:hover:shadow-md dark:bg-zinc-950/70 dark:shadow-black/20",
                             draggingTaskId === task.id
                               ? "task-card-dragging z-20 opacity-70"
                               : "",
@@ -1067,6 +1312,12 @@ export function TasksList({
                               : "",
                             dropCelebration?.taskId === task.id
                               ? "task-card-drop-celebration z-20"
+                              : "",
+                            newlyCreatedTaskId === task.id
+                              ? "task-card-created z-20"
+                              : "",
+                            deletingTaskId === task.id
+                              ? "task-card-deleting z-30 pointer-events-none"
                               : "",
                             isEditing
                               ? "h-auto overflow-visible"
@@ -1079,6 +1330,49 @@ export function TasksList({
                             taskCardBorderStyles[task.status],
                           ].join(" ")}
                         >
+                          {!isEditing ? (
+                            <div
+                              data-task-action="true"
+                              draggable={false}
+                              onPointerDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                              onDragStart={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => event.stopPropagation()}
+      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
+                            >
+                              <TaskHistoryAction
+                                task={task}
+                                onClick={() => setHistoryTaskId(task.id)}
+                              />
+                              <TaskCardAction
+                                label="Editar tarefa"
+                                onClick={() => startEdit(task)}
+                                disabled={isBusy}
+                              >
+                                <Pencil className="size-3.5" />
+                              </TaskCardAction>
+                              <TaskCardAction
+                                label="Excluir tarefa"
+                                onClick={() =>
+                                  setConfirmDeleteTask({
+                                    id: task.id,
+                                    title: task.title,
+                                  })
+                                }
+                                destructive
+                                disabled={isBusy}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </TaskCardAction>
+                            </div>
+                          ) : null}
                           {isCompleted ? (
                             <div className="flex min-w-0 flex-col items-start gap-2">
                               <button
@@ -1089,7 +1383,7 @@ export function TasksList({
                               >
                                 {task.title}
                               </button>
-                              <TaskHistoryTooltip task={task} />
+                              <TaskCreationDate task={task} />
                             </div>
                           ) : (
                           <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -1199,7 +1493,7 @@ export function TasksList({
                                         {task.attachments.length}
                                       </Badge>
                                     ) : null}
-                                    <TaskHistoryTooltip task={task} />
+                                    <TaskCreationDate task={task} />
                                   </div>
                                 </>
                               )}
@@ -1266,6 +1560,15 @@ export function TasksList({
         />
       ) : null}
 
+      {taskContextMenu && contextMenuTask ? (
+        <ContextMenu
+          x={taskContextMenu.x}
+          y={taskContextMenu.y}
+          actions={taskContextMenuActions}
+          onClose={() => setTaskContextMenu(null)}
+        />
+      ) : null}
+
       <datalist id="category-suggestions-edit">
         {availableCategories.map((category) => (
           <option key={category} value={category} />
@@ -1273,6 +1576,7 @@ export function TasksList({
       </datalist>
 
       <TaskDetailsDialog
+        key={detailsTask?.id ?? "closed"}
         task={detailsTask}
         busy={detailsTask ? busyTaskId === detailsTask.id : false}
         subtaskDraft={detailsTask ? subtaskDraftByTaskId[detailsTask.id] ?? "" : ""}
@@ -1288,6 +1592,10 @@ export function TasksList({
         onEdit={() => {
           if (!detailsTask) return;
           startEdit(detailsTask);
+        }}
+        onOpenHistory={() => {
+          if (!detailsTask) return;
+          setHistoryTaskId(detailsTask.id);
         }}
         onCancelEdit={cancelEdit}
         onSaveEdit={async ({ attachments, attachmentIdsToDelete }) => {
@@ -1344,6 +1652,11 @@ export function TasksList({
         }}
       />
 
+      <TaskHistoryDialog
+        task={historyTask}
+        onClose={() => setHistoryTaskId(null)}
+      />
+
       <AttachmentViewer
         viewer={attachmentViewer}
         onClose={() => setAttachmentViewer(null)}
@@ -1364,12 +1677,16 @@ export function TasksList({
         confirmLabel="Excluir"
         onConfirm={async () => {
           if (!confirmDeleteTask) return;
+          const taskId = confirmDeleteTask.id;
+          setConfirmDeleteTask(null);
+          setDeletingTaskId(taskId);
           setDeletingConfirm(true);
           try {
-            await onDeleteTask(confirmDeleteTask.id);
+            await new Promise((resolve) => window.setTimeout(resolve, 720));
+            const deleted = await onDeleteTask(taskId);
+            if (!deleted) setDeletingTaskId(null);
           } finally {
             setDeletingConfirm(false);
-            setConfirmDeleteTask(null);
           }
         }}
         loading={deletingConfirm}
@@ -1408,6 +1725,7 @@ function TaskDetailsDialog({
   setEditingState,
   onClose,
   onEdit,
+  onOpenHistory,
   onCancelEdit,
   onSaveEdit,
   onEditDirtyChange,
@@ -1426,6 +1744,7 @@ function TaskDetailsDialog({
   setEditingState: Dispatch<SetStateAction<EditingState | null>>;
   onClose: () => void;
   onEdit: () => void;
+  onOpenHistory: () => void;
   onCancelEdit: () => void;
   onSaveEdit: (changes: {
     attachments: File[];
@@ -1480,21 +1799,43 @@ function TaskDetailsDialog({
                   </DialogDescription>
                 </div>
                 {!isEditing ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mr-8 shrink-0 rounded-full"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onEdit();
-                    }}
-                    disabled={busy}
-                  >
-                    <Pencil className="size-3.5" />
-                    Editar
-                  </Button>
+                  <div className="mr-8 flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="rounded-xl text-slate-500 hover:text-teal-600 dark:text-white/55 dark:hover:text-teal-300"
+                      aria-label="Ver histórico"
+                      title="Ver histórico"
+                      onClick={onOpenHistory}
+                    >
+                      <History className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="rounded-xl text-slate-500 hover:text-teal-600 dark:text-white/55 dark:hover:text-teal-300"
+                      aria-label="Editar tarefa"
+                      title="Editar tarefa"
+                      onClick={onEdit}
+                      disabled={busy}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="rounded-xl text-rose-500 hover:bg-rose-500/10 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300"
+                      aria-label="Excluir tarefa"
+                      title="Excluir tarefa"
+                      onClick={onRequestDelete}
+                      disabled={busy}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
                 ) : null}
               </div>
 
@@ -1536,18 +1877,6 @@ function TaskDetailsDialog({
                     </p>
                   </section>
                 ) : null}
-
-                <section>
-                  <div className="mb-3 flex items-center gap-2">
-                    <History className="size-4 text-teal-500" />
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
-                      Histórico
-                    </h3>
-                  </div>
-                  <div className="rounded-2xl border border-slate-900/10 bg-slate-950/[0.025] p-3 text-slate-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/80">
-                    <TaskHistoryTimeline task={task} />
-                  </div>
-                </section>
 
                 <section>
                   <div className="flex items-center justify-between gap-3">
@@ -1689,18 +2018,56 @@ function TaskDetailsDialog({
               </div>
               )}
             </div>
-            <div className="flex items-center justify-end border-t border-slate-900/10 px-5 py-3 dark:border-white/10 sm:px-6">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300"
-                onClick={onRequestDelete}
-                disabled={busy}
-              >
-                <Trash2 className="size-3.5" />
-                Excluir tarefa
-              </Button>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TaskHistoryDialog({
+  task,
+  onClose,
+}: {
+  task: Task | null;
+  onClose: () => void;
+}) {
+  const history = task ? getTaskHistory(task) : [];
+
+  return (
+    <Dialog
+      open={Boolean(task)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="grid h-auto max-h-[min(86svh,44rem)] w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl bg-white p-0 dark:bg-zinc-950 sm:w-[38rem] sm:max-w-[calc(100vw-3rem)] sm:rounded-3xl">
+        {task ? (
+          <>
+            <div className="border-b border-slate-900/10 px-5 py-4 pr-12 dark:border-white/10 sm:px-6 sm:py-5">
+              <div className="flex items-start gap-3">
+                <History className="mt-1 size-5 shrink-0 text-teal-500" />
+                <div className="min-w-0">
+                  <DialogTitle className="break-words text-xl leading-tight sm:text-2xl">
+                    Histórico da tarefa
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 break-words">
+                    {task.title}
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                  {history.length} {history.length === 1 ? "registro" : "registros"}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-white/45">
+                  Status atual: {getStatusLabel(task.status)}
+                </p>
+              </div>
+              <TaskHistoryTimeline task={task} />
             </div>
           </>
         ) : null}
