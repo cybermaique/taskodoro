@@ -313,7 +313,7 @@ export function TaskForm({
                 </span>
               ))}
               <label
-                className={`flex items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 dark:border-white/10 ${isSubmitting ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-slate-900/5 dark:hover:bg-white/10"}`}
+                className={`task-attachment-trigger ${isSubmitting ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
               >
                 <Paperclip className="size-3.5" /> Adicionar
                 <input
@@ -330,7 +330,7 @@ export function TaskForm({
           ) : (
             <>
               <label
-                className={`flex items-center gap-1.5 rounded-full border border-slate-900/10 px-2.5 py-1 dark:border-white/10 ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-slate-900/5 dark:hover:bg-white/10"}`}
+                className={`task-attachment-trigger ${isSubmitting ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
               >
                 <Paperclip className="size-3.5" /> Anexar arquivo
                 <input

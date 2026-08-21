@@ -372,6 +372,77 @@
   opacity: 1;
 }
 
+.task-attachment-trigger {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.45rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--profile-accent) 52%, var(--border));
+  border-radius: 9999px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--profile-accent) 18%, var(--secondary)),
+    color-mix(in srgb, var(--profile-accent) 6%, transparent)
+  );
+  padding: 0.42rem 0.85rem;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--profile-accent) 18%);
+  font-size: 0.78rem;
+  font-weight: 650;
+  box-shadow: 0 8px 22px -17px var(--profile-accent-strong),
+    0 0 0 1px var(--profile-accent-faint);
+  transition: transform 180ms ease, border-color 180ms ease,
+    background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.task-attachment-trigger::before {
+  position: absolute;
+  inset: -80% auto -80% -38%;
+  z-index: 0;
+  width: 28%;
+  transform: translateX(-180%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 70%), transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.task-attachment-trigger > * {
+  position: relative;
+  z-index: 1;
+}
+
+.task-attachment-trigger:hover,
+.task-attachment-trigger:focus-within {
+  border-color: color-mix(in srgb, var(--profile-accent) 78%, white 8%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--profile-accent) 30%, var(--secondary)),
+    color-mix(in srgb, var(--profile-accent) 12%, transparent)
+  );
+  color: var(--profile-accent-contrast);
+  box-shadow: 0 12px 28px -16px var(--profile-accent-strong),
+    0 0 0 3px var(--profile-accent-faint), 0 0 22px var(--profile-accent-soft);
+  transform: translateY(-1px);
+}
+
+.task-attachment-trigger:hover::before,
+.task-attachment-trigger:focus-within::before {
+  animation: app-button-sheen 900ms cubic-bezier(0.16, 0.82, 0.2, 1) both;
+  opacity: 1;
+}
+
+.task-attachment-trigger:hover svg,
+.task-attachment-trigger:focus-within svg {
+  transform: scale(1.1) rotate(-8deg);
+}
+
+.task-attachment-trigger:active {
+  transform: translateY(0) scale(0.97);
+}
+
 .app-menu-action-danger {
   border-color: rgb(244 63 94 / 18%);
   background: rgb(244 63 94 / 5%);
