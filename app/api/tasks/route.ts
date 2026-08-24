@@ -2,7 +2,7 @@
 
 import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/access";
 import { createTask, listTasks } from "@/lib/tasks";
-import type { TaskPriority } from "@/types/task";
+import type { TaskPriority, TaskType } from "@/types/task";
 
 export async function GET(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
@@ -38,6 +38,14 @@ export async function POST(request: NextRequest) {
       body.priority === "low" || body.priority === "medium" || body.priority === "high"
         ? (body.priority as TaskPriority)
         : undefined;
+    const type =
+      body.type === "feature" ||
+      body.type === "bug" ||
+      body.type === "improvement" ||
+      body.type === "task" ||
+      body.type === "date"
+        ? (body.type as TaskType)
+        : undefined;
     const subtasks = Array.isArray(body.subtasks)
       ? body.subtasks
           .filter((title: unknown): title is string => typeof title === "string")
@@ -49,6 +57,7 @@ export async function POST(request: NextRequest) {
       title,
       description: typeof body.description === "string" ? body.description : "",
       priority,
+      type,
       category:
         body.category === null || typeof body.category === "string"
           ? body.category
