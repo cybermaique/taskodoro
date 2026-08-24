@@ -16,8 +16,8 @@ import {
   useState,
 } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
+  ArrowLeft,
+  ArrowRight,
   Bug,
   Heart,
   Circle,
@@ -31,6 +31,16 @@ import {
   ImageIcon,
   ImagePlus,
   FileText,
+  FileAudio,
+  FileCode2,
+  File,
+  Paperclip,
+  GripVertical,
+  BookOpen,
+  Plane,
+  HeartPulse,
+  WalletCards,
+  UserRound,
   Loader2,
   Lightbulb,
   ListTodo,
@@ -64,10 +74,18 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { getTaskTypeOptions, TASK_TYPE_OPTIONS } from "@/types/task";
+import {
+  getDefaultTaskType,
+  getTaskCategoryLabel,
+  getTaskTypeOptions,
+  DATE_DESCRIPTION_TEMPLATE,
+  TASK_CATEGORY_OPTIONS,
+  TASK_TYPE_OPTIONS,
+} from "@/types/task";
 import type {
   Task,
   TaskAttachment,
+  TaskDescriptionHistory,
   TaskPriority,
   TaskStatusHistory,
   TaskType,
@@ -82,7 +100,6 @@ interface TasksListProps {
   isCompact?: boolean;
   initialColumnWidths: TaskColumnWidths | null;
   onColumnWidthsChange?: (widths: TaskColumnWidths) => Promise<void>;
-  categorySuggestions: string[];
   onRequestCreate?: () => void;
   onEditDirtyChange?: (isDirty: boolean) => void;
   onDeleteTask: (taskId: string) => Promise<boolean>;
@@ -90,11 +107,16 @@ interface TasksListProps {
     taskId: string,
     payload: Record<string, unknown>,
   ) => Promise<boolean>;
+  onRestoreTaskDescription: (
+    taskId: string,
+    historyId: string,
+  ) => Promise<boolean>;
   onAddAttachment: (taskId: string, file: File) => Promise<void>;
   onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   onCreateSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
+  onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
 }
 
 type PriorityFilter = "all" | TaskPriority;
@@ -102,7 +124,6 @@ type TaskSection = Task["status"];
 
 const taskViewStorageKey = "taskboard_task_view_filter";
 const taskPriorityStorageKey = "taskboard_task_priority_filter";
-const taskCategoryStorageKey = "taskboard_task_category_filter";
 
 interface EditingState {
   title: string;
@@ -175,7 +196,14 @@ function getTaskTypeClass(type: TaskType) {
     return "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200";
   }
 
-  if (type === "date") {
+  if (
+    type === "date" ||
+    type === "study" ||
+    type === "travel" ||
+    type === "health" ||
+    type === "finance" ||
+    type === "personal"
+  ) {
     return "border-pink-500/30 bg-pink-500/10 text-pink-700 dark:text-pink-200";
   }
 
@@ -192,7 +220,17 @@ function TaskTypeBadge({ taskType }: { taskType: TaskType }) {
         ? Lightbulb
         : taskType === "date"
           ? Heart
-          : ListTodo;
+          : taskType === "study"
+          ? BookOpen
+          : taskType === "travel"
+            ? Plane
+            : taskType === "health"
+              ? HeartPulse
+              : taskType === "finance"
+                ? WalletCards
+                : taskType === "personal"
+                  ? UserRound
+                  : ListTodo;
 
   return (
     <Badge className={`gap-1 ${getTaskTypeClass(taskType)}`}>
@@ -601,20 +639,20 @@ export function TasksList({
   isCompact = false,
   initialColumnWidths,
   onColumnWidthsChange,
-  categorySuggestions,
   onRequestCreate,
   onEditDirtyChange,
   onDeleteTask,
   onUpdateTask,
+  onRestoreTaskDescription,
   onAddAttachment,
   onDeleteAttachment,
   onCreateSubtask,
   onToggleSubtask,
   onDeleteSubtask,
+  onReorderSubtasks,
 }: TasksListProps) {
   const [viewFilter, setViewFilter] = useState<TaskView>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingState, setEditingState] = useState<EditingState | null>(null);
@@ -640,6 +678,9 @@ export function TasksList({
   );
   const [detailsTaskId, setDetailsTaskId] = useState<string | null>(null);
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
+  const [descriptionHistoryTaskId, setDescriptionHistoryTaskId] = useState<
+    string | null
+  >(null);
   const [attachmentViewer, setAttachmentViewer] = useState<{
     task: Task;
     index: number;
@@ -677,6 +718,7 @@ export function TasksList({
         storedView === "all" ||
         storedView === "work" ||
         storedView === "personal" ||
+        storedView === "study" ||
         storedView === "travel";
 
       if (isValidTaskView) {
@@ -696,14 +738,6 @@ export function TasksList({
         setPriorityFilter(storedPriority as PriorityFilter);
       }
 
-      // Load category filter
-      const storedCategory = window.localStorage.getItem(
-        taskCategoryStorageKey,
-      );
-      if (storedCategory) {
-        setCategoryFilter(storedCategory);
-      }
-
       setHasLoadedFilters(true);
     }, 0);
 
@@ -719,11 +753,6 @@ export function TasksList({
     if (!hasLoadedFilters) return;
     window.localStorage.setItem(taskPriorityStorageKey, priorityFilter);
   }, [priorityFilter, hasLoadedFilters]);
-
-  useEffect(() => {
-    if (!hasLoadedFilters) return;
-    window.localStorage.setItem(taskCategoryStorageKey, categoryFilter);
-  }, [categoryFilter, hasLoadedFilters]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -788,16 +817,6 @@ export function TasksList({
     });
   }, [normalizedTaskOrder, tasks]);
 
-  const availableCategories = useMemo(() => {
-    const fromTasks = tasks
-      .map((task) => task.category)
-      .filter((category): category is string => Boolean(category));
-
-    return Array.from(new Set([...categorySuggestions, ...fromTasks])).sort(
-      (a, b) => a.localeCompare(b, "pt-BR"),
-    );
-  }, [categorySuggestions, tasks]);
-
   const filteredTasks = useMemo(() => {
     return orderedTasks.filter((task) => {
       if (task.id === newlyCreatedTaskId) {
@@ -812,18 +831,15 @@ export function TasksList({
         return false;
       }
 
-      if (viewFilter === "travel" && task.category !== "viagem") {
+      if (viewFilter === "study" && task.type !== "study") {
+        return false;
+      }
+
+      if (viewFilter === "travel" && task.type !== "travel") {
         return false;
       }
 
       if (priorityFilter !== "all" && task.priority !== priorityFilter) {
-        return false;
-      }
-
-      if (
-        categoryFilter !== "all" &&
-        (task.category ?? "") !== categoryFilter
-      ) {
         return false;
       }
 
@@ -844,7 +860,6 @@ export function TasksList({
       );
     });
   }, [
-    categoryFilter,
     orderedTasks,
     priorityFilter,
     search,
@@ -983,6 +998,9 @@ export function TasksList({
     : null;
   const historyTask = historyTaskId
     ? tasks.find((task) => task.id === historyTaskId) ?? null
+    : null;
+  const descriptionHistoryTask = descriptionHistoryTaskId
+    ? tasks.find((task) => task.id === descriptionHistoryTaskId) ?? null
     : null;
   const taskContextMenuActions: ContextMenuAction[] = contextMenuTask
     ? [
@@ -1247,6 +1265,7 @@ export function TasksList({
             ["all", "Todas"],
             ["work", "Trabalho"],
             ["personal", "Pessoal"],
+            ["study", "Estudos"],
             ["travel", "Viagem"],
           ].map(([value, label]) => (
             <Button
@@ -1264,9 +1283,7 @@ export function TasksList({
 
         <div
           className={
-            isCompact
-              ? "mt-4"
-              : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr_0.9fr]"
+            isCompact ? "mt-4" : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr]"
           }
         >
           <label className="app-live-search relative min-w-0">
@@ -1302,28 +1319,6 @@ export function TasksList({
             </Select>
           ) : null}
 
-          {!isCompact ? (
-            <Select
-              value={categoryFilter}
-              onValueChange={(value) => setCategoryFilter(value ?? "all")}
-            >
-              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none md:h-10 dark:border-white/10 dark:bg-black/20">
-                <span className="flex h-full items-center text-sm">
-                  {categoryFilter === "all"
-                    ? "Todas categorias"
-                    : categoryFilter}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas categorias</SelectItem>
-                {availableCategories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
         </div>
       </div>
 
@@ -1609,17 +1604,11 @@ export function TasksList({
                                         className="max-w-full truncate"
                                         title={task.category}
                                       >
-                                        {task.category}
+                                        {getTaskCategoryLabel(task.category)}
                                       </Badge>
                                     ) : null}
                                     {task.attachments.length ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="gap-1"
-                                      >
-                                        <ImageIcon className="size-3" />{" "}
-                                        {task.attachments.length}
-                                      </Badge>
+                                      <TaskAttachmentBadge attachments={task.attachments} />
                                     ) : null}
                                     <TaskCreationDate task={task} />
                                   </div>
@@ -1726,12 +1715,6 @@ export function TasksList({
         />
       ) : null}
 
-      <datalist id="category-suggestions-edit">
-        {availableCategories.map((category) => (
-          <option key={category} value={category} />
-        ))}
-      </datalist>
-
       <TaskDetailsDialog
         key={detailsTask?.id ?? "closed"}
         task={detailsTask}
@@ -1753,6 +1736,10 @@ export function TasksList({
         onOpenHistory={() => {
           if (!detailsTask) return;
           setHistoryTaskId(detailsTask.id);
+        }}
+        onOpenDescriptionHistory={() => {
+          if (!detailsTask) return;
+          setDescriptionHistoryTaskId(detailsTask.id);
         }}
         onCancelEdit={cancelEdit}
         onSaveEdit={async ({ attachments, attachmentIdsToDelete }) => {
@@ -1788,6 +1775,7 @@ export function TasksList({
         }}
         onToggleSubtask={onToggleSubtask}
         onDeleteSubtask={(subtask) => setConfirmDeleteSubtask(subtask)}
+        onReorderSubtasks={onReorderSubtasks}
         onSubmitSubtask={(event) => {
           if (detailsTask) void submitSubtask(event, detailsTask.id);
         }}
@@ -1813,6 +1801,17 @@ export function TasksList({
       <TaskHistoryDialog
         task={historyTask}
         onClose={() => setHistoryTaskId(null)}
+      />
+
+      <TaskDescriptionHistoryDialog
+        task={descriptionHistoryTask}
+        busy={
+          descriptionHistoryTask
+            ? busyTaskId === descriptionHistoryTask.id
+            : false
+        }
+        onClose={() => setDescriptionHistoryTaskId(null)}
+        onRestore={onRestoreTaskDescription}
       />
 
       <AttachmentViewer
@@ -1884,12 +1883,14 @@ function TaskDetailsDialog({
   onClose,
   onEdit,
   onOpenHistory,
+  onOpenDescriptionHistory,
   onCancelEdit,
   onSaveEdit,
   onEditDirtyChange,
   onRequestDelete,
   onToggleSubtask,
   onDeleteSubtask,
+  onReorderSubtasks,
   onSubmitSubtask,
   onSubtaskDraftChange,
   onOpenAttachment,
@@ -1903,6 +1904,7 @@ function TaskDetailsDialog({
   onClose: () => void;
   onEdit: () => void;
   onOpenHistory: () => void;
+  onOpenDescriptionHistory: () => void;
   onCancelEdit: () => void;
   onSaveEdit: (changes: {
     attachments: File[];
@@ -1912,10 +1914,13 @@ function TaskDetailsDialog({
   onRequestDelete: () => void;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
   onDeleteSubtask: (subtask: { id: string; title: string }) => void;
+  onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
   onSubmitSubtask: (event: FormEvent<HTMLFormElement>) => void;
   onSubtaskDraftChange: (value: string) => void;
   onOpenAttachment: (index: number) => void;
 }) {
+  const [draggingSubtaskId, setDraggingSubtaskId] = useState<string | null>(null);
+  const [dragOverSubtaskId, setDragOverSubtaskId] = useState<string | null>(null);
   const completedSubtasks =
     task?.subtasks.filter((subtask) => subtask.is_completed).length ?? 0;
   const subtaskCount = task?.subtasks.length ?? 0;
@@ -2007,7 +2012,7 @@ function TaskDetailsDialog({
                 </Badge>
                 {task.category ? (
                   <Badge variant="outline" className="max-w-full truncate">
-                    {task.category}
+                    {getTaskCategoryLabel(task.category)}
                   </Badge>
                 ) : null}
               </div>
@@ -2026,16 +2031,34 @@ function TaskDetailsDialog({
                 />
               ) : (
               <div className="space-y-8">
-                {task.description ? (
-                  <section>
+                <section>
+                  <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
                       Descrição
                     </h3>
+                    {task.description_history.length ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="rounded-full text-xs text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200"
+                        onClick={onOpenDescriptionHistory}
+                      >
+                        <History className="size-3.5" />
+                        Histórico
+                      </Button>
+                    ) : null}
+                  </div>
+                  {task.description ? (
                     <TaskDescription className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
                       {task.description}
                     </TaskDescription>
-                  </section>
-                ) : null}
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-500 dark:text-white/45">
+                      Sem descrição.
+                    </p>
+                  )}
+                </section>
 
                 <section>
                   <div className="flex items-center justify-between gap-3">
@@ -2051,13 +2074,13 @@ function TaskDetailsDialog({
                     </div>
                   </div>
                   {task.attachments.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {sortAttachments(task.attachments).map(
                         (attachment, index) => (
                           <button
                             key={attachment.id}
                             type="button"
-                            className="group/image overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10"
+                            className="group/image flex min-w-0 items-center gap-3 rounded-xl border border-slate-900/10 p-2 text-left transition hover:bg-slate-900/[0.03] dark:border-white/10 dark:hover:bg-white/[0.05]"
                             title={`Abrir ${attachment.file_name}`}
                             onClick={() => onOpenAttachment(index)}
                           >
@@ -2065,6 +2088,14 @@ function TaskDetailsDialog({
                               attachment={attachment}
                               taskId={task.id}
                             />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium" title={attachment.file_name}>
+                                {attachment.file_name}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-slate-500 dark:text-white/45">
+                                {getAttachmentKind(attachment) === "pdf" ? "PDF" : attachment.mime_type || "Arquivo"}
+                              </span>
+                            </span>
                           </button>
                         ),
                       )}
@@ -2097,9 +2128,67 @@ function TaskDetailsDialog({
                       {task.subtasks.map((subtask) => (
                         <li
                           key={subtask.id}
-                          className="app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 dark:bg-white/[0.045]"
+                          draggable={!busy}
+                          onDragStart={(event) => {
+                            const target = event.target as HTMLElement;
+                            if (target.closest("button,input")) {
+                              event.preventDefault();
+                              return;
+                            }
+
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", subtask.id);
+                            setDraggingSubtaskId(subtask.id);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (draggingSubtaskId && draggingSubtaskId !== subtask.id) {
+                              event.dataTransfer.dropEffect = "move";
+                              setDragOverSubtaskId(subtask.id);
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceId =
+                              event.dataTransfer.getData("text/plain") || draggingSubtaskId;
+                            if (!sourceId || sourceId === subtask.id || !task) {
+                              setDraggingSubtaskId(null);
+                              setDragOverSubtaskId(null);
+                              return;
+                            }
+
+                            const orderedIds = task.subtasks.map((item) => item.id);
+                            const sourceIndex = orderedIds.indexOf(sourceId);
+                            const targetIndex = orderedIds.indexOf(subtask.id);
+                            if (sourceIndex < 0 || targetIndex < 0) {
+                              setDraggingSubtaskId(null);
+                              setDragOverSubtaskId(null);
+                              return;
+                            }
+
+                            orderedIds.splice(sourceIndex, 1);
+                            orderedIds.splice(orderedIds.indexOf(subtask.id), 0, sourceId);
+                            setDraggingSubtaskId(null);
+                            setDragOverSubtaskId(null);
+                            void onReorderSubtasks(task.id, orderedIds);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingSubtaskId(null);
+                            setDragOverSubtaskId(null);
+                          }}
+                          className={[
+                            "app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 transition dark:bg-white/[0.045]",
+                            draggingSubtaskId === subtask.id ? "opacity-45" : "",
+                            dragOverSubtaskId === subtask.id
+                              ? "ring-2 ring-teal-400/70 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950"
+                              : "",
+                          ].join(" ")}
                         >
                           <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
+                            <GripVertical
+                              className="size-4 shrink-0 cursor-grab text-slate-400/70 active:cursor-grabbing dark:text-white/35"
+                              aria-hidden="true"
+                            />
                             <Checkbox
                               checked={subtask.is_completed}
                               onCheckedChange={() =>
@@ -2111,6 +2200,11 @@ function TaskDetailsDialog({
                               className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
                             />
                             <span
+                              title={
+                                subtask.is_completed && subtask.completed_at
+                                  ? `Finalizada em ${formatDateTime(subtask.completed_at)}`
+                                  : undefined
+                              }
                               className={[
                                 "truncate text-sm",
                                 subtask.is_completed
@@ -2235,8 +2329,159 @@ function TaskHistoryDialog({
   );
 }
 
+function TaskDescriptionHistoryDialog({
+  task,
+  busy,
+  onClose,
+  onRestore,
+}: {
+  task: Task | null;
+  busy: boolean;
+  onClose: () => void;
+  onRestore: (taskId: string, historyId: string) => Promise<boolean>;
+}) {
+  const [pendingRevision, setPendingRevision] =
+    useState<TaskDescriptionHistory | null>(null);
+
+  return (
+    <Dialog
+      open={Boolean(task)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="grid h-auto max-h-[min(86svh,52rem)] w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl bg-white p-0 dark:bg-zinc-950 sm:w-[46rem] sm:max-w-[calc(100vw-3rem)] sm:rounded-3xl">
+        {task ? (
+          <>
+            <div className="border-b border-slate-900/10 px-5 py-4 pr-12 dark:border-white/10 sm:px-6 sm:py-5">
+              <div className="flex items-start gap-3">
+                <History className="mt-1 size-5 shrink-0 text-teal-500" />
+                <div className="min-w-0">
+                  <DialogTitle className="break-words text-xl leading-tight sm:text-2xl">
+                    Histórico da descrição
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 break-words">
+                    {task.title}
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 space-y-4 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+              <section className="rounded-2xl border border-teal-500/30 bg-teal-500/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                  Versão atual
+                </p>
+                <TaskDescription className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
+                  {task.description ?? "Sem descrição."}
+                </TaskDescription>
+              </section>
+
+              {task.description_history.map((revision) => (
+                <section
+                  key={revision.id}
+                  className="rounded-2xl border border-slate-900/10 p-4 dark:border-white/10"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <time
+                      dateTime={revision.changed_at}
+                      className="text-xs font-medium text-slate-500 dark:text-white/45"
+                    >
+                      {formatDateTime(revision.changed_at)}
+                    </time>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full"
+                      disabled={busy}
+                      onClick={() => setPendingRevision(revision)}
+                    >
+                      Restaurar
+                    </Button>
+                  </div>
+                  <TaskDescription className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
+                    {revision.description ?? "Sem descrição."}
+                  </TaskDescription>
+                </section>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+
+      <ConfirmDialog
+        open={Boolean(pendingRevision)}
+        onOpenChange={(open) => {
+          if (!open) setPendingRevision(null);
+        }}
+        title="Restaurar esta descrição?"
+        description="A descrição atual será preservada como uma nova versão no histórico."
+        confirmLabel="Restaurar"
+        loading={busy}
+        onConfirm={async () => {
+          if (!task || !pendingRevision) return;
+          const restored = await onRestore(task.id, pendingRevision.id);
+          if (restored) setPendingRevision(null);
+        }}
+      />
+    </Dialog>
+  );
+}
+
+function getAttachmentUrl(taskId: string, attachmentId: string) {
+  return `/api/tasks/${taskId}/attachments/${attachmentId}`;
+}
+
+function getAttachmentKind(attachment: TaskAttachment) {
+  const mimeType = attachment.mime_type.toLocaleLowerCase();
+  const extension = attachment.file_name.split(".").pop()?.toLocaleLowerCase();
+
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType === "application/pdf" || extension === "pdf") return "pdf";
+  if (mimeType.startsWith("audio/")) return "audio";
+  if (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    ["txt", "md", "csv", "json", "log", "xml", "html", "css", "js", "ts"].includes(extension ?? "")
+  ) {
+    return "text";
+  }
+  return "file";
+}
+
 function isImageAttachment(mimeType: string) {
   return mimeType.startsWith("image/");
+}
+
+function AttachmentIcon({ attachment, className = "size-5" }: { attachment: TaskAttachment; className?: string }) {
+  const kind = getAttachmentKind(attachment);
+  const Icon =
+    kind === "image"
+      ? ImageIcon
+      : kind === "audio"
+        ? FileAudio
+        : kind === "text"
+          ? FileCode2
+          : kind === "pdf"
+            ? FileText
+            : File;
+  return <Icon className={className} />;
+}
+
+function TaskAttachmentBadge({ attachments }: { attachments: TaskAttachment[] }) {
+  const kinds = new Set(attachments.map(getAttachmentKind));
+  const firstAttachment = attachments[0];
+  const icon = kinds.size === 1 && firstAttachment
+    ? <AttachmentIcon attachment={firstAttachment} className="size-3" />
+    : <Paperclip className="size-3" />;
+
+  return (
+    <Badge variant="outline" className="gap-1" title={`${attachments.length} arquivo(s) anexado(s)`}>
+      {icon}
+      {attachments.length}
+    </Badge>
+  );
 }
 
 function sortAttachments(attachments: TaskAttachment[]) {
@@ -2292,54 +2537,61 @@ function AttachmentViewer({
         </DialogTitle>
         {viewer && attachment ? (
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-black/50">
-            {isImageAttachment(attachment.mime_type) ? (
+            {getAttachmentKind(attachment) === "image" ? (
               <>
                 {/* This authenticated API route cannot use Next's remote image optimizer. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/api/tasks/${viewer.task.id}/attachments/${attachment.id}`}
+                  src={getAttachmentUrl(viewer.task.id, attachment.id)}
                   alt={attachment.file_name}
                   className="max-h-[calc(90vh-7rem)] w-auto max-w-full rounded-lg object-contain"
                 />
               </>
+            ) : getAttachmentKind(attachment) === "audio" ? (
+              <div className="flex w-full max-w-xl flex-col items-center gap-5 rounded-xl bg-white/5 p-8 text-center">
+                <AttachmentIcon attachment={attachment} className="size-12 text-slate-300" />
+                <audio controls className="w-full" src={getAttachmentUrl(viewer.task.id, attachment.id)}>
+                  Seu navegador não suporta a reprodução deste áudio.
+                </audio>
+              </div>
+            ) : getAttachmentKind(attachment) === "pdf" || getAttachmentKind(attachment) === "text" ? (
+              <iframe
+                src={getAttachmentUrl(viewer.task.id, attachment.id)}
+                title={`Prévia de ${attachment.file_name}`}
+                className="h-full min-h-80 w-full rounded-xl border-0 bg-white"
+              />
             ) : (
-              <a
-                href={`/api/tasks/${viewer.task.id}/attachments/${attachment.id}`}
-                download
-                className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-xl px-8 text-center hover:bg-white/5"
-              >
-                <FileText className="size-12 text-slate-400" />
+              <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-xl px-8 text-center">
+                <AttachmentIcon attachment={attachment} className="size-12 text-slate-400" />
                 <span className="max-w-64 break-words">
                   {attachment.file_name}
                 </span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 text-sm">
-                  Baixar arquivo
-                </span>
-              </a>
+                <span className="text-sm text-white/60">Prévia indisponível para este tipo de arquivo.</span>
+              </div>
             )}
             {count > 1 ? (
               <>
                 <Button
                   type="button"
                   size="icon"
-                  variant="secondary"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full"
+                  variant="ghost"
+                  className="group/nav absolute left-4 top-1/2 size-11 -translate-y-1/2 rounded-2xl border border-white/15 bg-zinc-950/70 text-white shadow-xl shadow-black/35 backdrop-blur-xl hover:scale-105 hover:border-teal-300/50 hover:bg-teal-400/15 hover:text-teal-100 sm:size-12"
                   onClick={() =>
                     onChangeIndex((viewer.index - 1 + count) % count)
                   }
-                  aria-label="Imagem anterior"
+                  aria-label="Anexo anterior"
                 >
-                  <ChevronLeft className="size-5" />
+                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover/nav:-translate-x-0.5" />
                 </Button>
                 <Button
                   type="button"
                   size="icon"
-                  variant="secondary"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full"
+                  variant="ghost"
+                  className="group/nav absolute right-4 top-1/2 size-11 -translate-y-1/2 rounded-2xl border border-white/15 bg-zinc-950/70 text-white shadow-xl shadow-black/35 backdrop-blur-xl hover:scale-105 hover:border-teal-300/50 hover:bg-teal-400/15 hover:text-teal-100 sm:size-12"
                   onClick={() => onChangeIndex((viewer.index + 1) % count)}
-                  aria-label="Próxima imagem"
+                  aria-label="Próximo anexo"
                 >
-                  <ChevronRight className="size-5" />
+                  <ArrowRight className="size-5 transition-transform duration-200 group-hover/nav:translate-x-0.5" />
                 </Button>
                 <span className="absolute bottom-3 rounded-full bg-black/65 px-2.5 py-1 text-xs">
                   {viewer.index + 1} de {count}
@@ -2366,7 +2618,7 @@ function AttachmentPreview({
         className="flex size-16 items-center justify-center rounded-lg bg-slate-900/5 text-slate-500 dark:bg-white/10"
         title={attachment.file_name}
       >
-        <FileText className="size-6" />
+        <AttachmentIcon attachment={attachment} className="size-6" />
       </span>
     );
   }
@@ -2376,7 +2628,7 @@ function AttachmentPreview({
       {/* This authenticated API route cannot use Next's remote image optimizer. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/api/tasks/${taskId}/attachments/${attachment.id}`}
+        src={getAttachmentUrl(taskId, attachment.id)}
         alt={attachment.file_name}
         className="size-16 rounded-lg object-cover transition group-hover/image:scale-105"
       />
@@ -2514,11 +2766,6 @@ function TaskEditForm({
         placeholder="Descrição opcional"
         rows={3}
       />
-      <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/35">
-        Use <code>/code</code> ou <code>/json</code> em uma nova linha; links
-        podem usar <code>Texto &gt; site.com</code>.
-      </p>
-
       <div className="rounded-2xl border border-slate-900/10 p-3 dark:border-white/10">
         <p className="mb-2 text-xs font-medium text-slate-500 dark:text-white/45">
           Anexos
@@ -2628,14 +2875,18 @@ function TaskEditForm({
           value={editingState.type}
           disabled={isSaving}
           onValueChange={(value) =>
-            setEditingState((current) =>
-              current
-                ? {
-                    ...current,
-                    type: (value ?? "task") as TaskType,
-                  }
-                : current,
-            )
+            setEditingState((current) => {
+              if (!current) return current;
+              const type = (value ?? "task") as TaskType;
+              return {
+                ...current,
+                type,
+                description:
+                  type === "date"
+                    ? DATE_DESCRIPTION_TEMPLATE
+                    : current.description,
+              };
+            })
           }
         >
           <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20">
@@ -2652,28 +2903,37 @@ function TaskEditForm({
           </SelectContent>
         </Select>
 
-        <Input
-          className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
+        <Select
           value={editingState.category}
           disabled={isSaving}
-          onChange={(event) =>
+          onValueChange={(value) =>
             setEditingState((current) => {
               if (!current) return current;
-              const category = event.target.value;
+              const category = value ?? "trabalho";
               return {
                 ...current,
                 category,
-                type: getTaskTypeOptions(category).some(
-                  (option) => option.value === current.type,
-                )
-                  ? current.type
-                  : "task",
+                type: getDefaultTaskType(category),
               };
             })
           }
-          placeholder="Categoria"
-          list="category-suggestions-edit"
-        />
+        >
+          <SelectTrigger
+            aria-label="Categoria da tarefa"
+            className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20"
+          >
+            <span className="flex h-full items-center text-sm">
+              {getTaskCategoryLabel(editingState.category)}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            {TASK_CATEGORY_OPTIONS.map((category) => (
+              <SelectItem key={category.value} value={category.value}>
+                {category.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
       </div>
 

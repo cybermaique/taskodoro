@@ -10,7 +10,12 @@ import {
   type Profile,
   type TaskColumnWidths,
 } from "@/types/profile";
-import type { Task, TaskAttachment, TaskStatusHistory } from "@/types/task";
+import type {
+  Task,
+  TaskAttachment,
+  TaskDescriptionHistory,
+  TaskStatusHistory,
+} from "@/types/task";
 
 const TASK_COLUMNS = `
   id,
@@ -36,6 +41,8 @@ const TASK_COLUMNS = `
     task_id,
     title,
     is_completed,
+    completed_at,
+    position,
     created_at,
     updated_at
   ),
@@ -45,6 +52,12 @@ const TASK_COLUMNS = `
     from_status,
     to_status,
     changed_at
+  ),
+  task_description_history(
+    id,
+    task_id,
+    description,
+    changed_at
   )
 `;
 const PROFILE_COLUMNS =
@@ -53,6 +66,7 @@ const PROFILE_COLUMNS =
 type RawTask = Task & {
   task_attachments?: TaskAttachment[];
   task_status_history?: TaskStatusHistory[];
+  task_description_history?: TaskDescriptionHistory[];
 };
 
 function mapTask(task: RawTask): Task {
@@ -61,7 +75,13 @@ function mapTask(task: RawTask): Task {
     attachments: Array.isArray(task.task_attachments)
       ? task.task_attachments
       : [],
-    subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+    subtasks: Array.isArray(task.subtasks)
+      ? [...task.subtasks].sort(
+          (left, right) =>
+            left.position - right.position ||
+            new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+        )
+      : [],
     status_history: Array.isArray(task.task_status_history)
       ? [...task.task_status_history].sort(
           (left, right) =>
@@ -71,6 +91,13 @@ function mapTask(task: RawTask): Task {
       : Array.isArray(task.status_history)
         ? task.status_history
         : [],
+    description_history: Array.isArray(task.task_description_history)
+      ? [...task.task_description_history].sort(
+          (left, right) =>
+            new Date(right.changed_at).getTime() -
+            new Date(left.changed_at).getTime(),
+        )
+      : [],
   };
 }
 
@@ -174,7 +201,7 @@ export function DashboardDataLoader({
           .from("tasks")
           .select(TASK_COLUMNS)
           .order("created_at", { ascending: false })
-          .order("created_at", { foreignTable: "subtasks", ascending: true }),
+          .order("position", { foreignTable: "subtasks", ascending: true }),
         supabase.from("notes").select("id,title,content,tags,is_pinned,created_at,updated_at").order("created_at", {
           ascending: false,
         }),
