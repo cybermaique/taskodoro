@@ -10,6 +10,7 @@ import type {
   TaskPriority,
   TaskStatusHistory,
   TaskStatus,
+  TaskType,
   UpdateSubtaskInput,
   UpdateTaskInput,
 } from "@/types/task";
@@ -20,6 +21,7 @@ const TASK_COLUMNS = `
   description,
   status,
   priority,
+  type,
   category,
   created_at,
   completed_at,
@@ -109,6 +111,19 @@ function mapTask(task: Task): Task {
         new Date(right.changed_at).getTime(),
     ),
   };
+}
+
+function normalizeTaskType(value: string | undefined): TaskType {
+  if (
+    value === "feature" ||
+    value === "bug" ||
+    value === "improvement" ||
+    value === "date"
+  ) {
+    return value;
+  }
+
+  return "task";
 }
 
 export async function createTaskAttachment({
@@ -223,6 +238,7 @@ export async function createTask(input: CreateTaskInput) {
     description: normalizeNullableText(input.description),
     status: "not_started" as const,
     priority: normalizePriority(input.priority),
+    type: normalizeTaskType(input.type),
     category: normalizeNullableText(input.category),
     completed_at: null,
   };
@@ -281,6 +297,10 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
 
   if (input.priority !== undefined) {
     updatePayload.priority = normalizePriority(input.priority);
+  }
+
+  if (input.type !== undefined) {
+    updatePayload.type = normalizeTaskType(input.type);
   }
 
   if (input.category !== undefined) {

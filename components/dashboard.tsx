@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import type { Note } from "@/types/note";
 import type { Profile, ProfileDisplayMode } from "@/types/profile";
-import type { Task, TaskPriority } from "@/types/task";
+import type { Task, TaskPriority, TaskType } from "@/types/task";
 
 const APP_TITLE = "Taskboard";
 const DEFAULT_CATEGORIES = [
@@ -193,6 +193,7 @@ export function Dashboard({
     title: string;
     description?: string;
     priority?: TaskPriority;
+    type?: TaskType;
     category?: string | null;
     attachments?: File[];
     subtasks?: string[];

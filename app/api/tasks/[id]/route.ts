@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/access";
 import { deleteTask, updateTask } from "@/lib/tasks";
-import type { TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskPriority, TaskStatus, TaskType } from "@/types/task";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -29,6 +29,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       body.priority === "low" || body.priority === "medium" || body.priority === "high"
         ? (body.priority as TaskPriority)
         : undefined;
+    const type =
+      body.type === "feature" ||
+      body.type === "bug" ||
+      body.type === "improvement" ||
+      body.type === "task" ||
+      body.type === "date"
+        ? (body.type as TaskType)
+        : undefined;
     const task = await updateTask(id, {
       title: typeof body.title === "string" ? body.title : undefined,
       description:
@@ -37,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           : undefined,
       status,
       priority,
+      type,
       category:
         body.category === null || typeof body.category === "string"
           ? body.category

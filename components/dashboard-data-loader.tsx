@@ -18,6 +18,7 @@ const TASK_COLUMNS = `
   description,
   status,
   priority,
+  type,
   category,
   created_at,
   completed_at,

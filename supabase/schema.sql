@@ -8,6 +8,7 @@ create table if not exists public.tasks (
   description text,
   status text not null default 'not_started' check (status in ('not_started', 'in_progress', 'waiting', 'completed')),
   priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
+  type text not null default 'task' check (type in ('feature', 'bug', 'improvement', 'task', 'date')),
   category text,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
@@ -62,6 +63,7 @@ alter table public.task_attachments
 create index if not exists idx_tasks_created_at_desc on public.tasks (created_at desc);
 create index if not exists idx_tasks_status on public.tasks (status);
 create index if not exists idx_tasks_priority on public.tasks (priority);
+create index if not exists idx_tasks_type on public.tasks (type);
 create index if not exists idx_tasks_category on public.tasks (category);
 create index if not exists idx_task_status_history_task_id_changed_at
   on public.task_status_history (task_id, changed_at asc);
