@@ -652,7 +652,7 @@ export function Dashboard({
           open={taskCreateOpen}
           onOpenChange={handleTaskCreateDialogChange}
         >
-          <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 p-2 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
+          <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
             <DialogTitle className="sr-only">Nova tarefa</DialogTitle>
             <DialogDescription className="sr-only">
               Crie uma tarefa com descrição, anexos e subtarefas opcionais.
@@ -707,7 +707,7 @@ function StatPill({
 }) {
   return (
     <div className="app-stat-pill app-stat-live hidden items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 px-3 py-2 text-sm shadow-sm backdrop-blur sm:flex dark:border-white/10 dark:bg-white/10">
-      <Icon className="size-4 text-teal-600 dark:text-teal-300" />
+      <Icon className="size-4 text-[var(--profile-accent)]" />
       <span className="text-slate-500 dark:text-white/55">{label}</span>
       <AnimatedNumber value={value} />
     </div>

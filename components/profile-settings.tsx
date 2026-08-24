@@ -450,7 +450,7 @@ export function ProfileSettings({
           : null}
       </div>
 
-      <DialogContent className="max-h-[min(88svh,40rem)] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto p-0 sm:w-[min(92vw,44rem)]">
+      <DialogContent className="max-h-[min(88svh,40rem)] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto p-0 sm:w-[min(92vw,52rem)] sm:max-w-[52rem]">
         <div className="border-b border-slate-900/10 px-5 py-4 dark:border-white/10 sm:px-6 sm:py-5">
           <div className="flex items-center gap-3 pr-8">
             <span

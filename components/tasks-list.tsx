@@ -505,6 +505,7 @@ const taskCardBorderStyles: Record<TaskSection, string> = {
 };
 
 const taskOrderStorageKey = "taskboard_task_order";
+const maxVisibleTasksPerColumn = 10;
 const minTaskColumnWidth = 208;
 const maxTaskColumnWidth = 704;
 
@@ -625,6 +626,9 @@ export function TasksList({
   const [hasLoadedTaskOrder, setHasLoadedTaskOrder] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [expandedTaskSections, setExpandedTaskSections] = useState<
+    Partial<Record<TaskSection, boolean>>
+  >({});
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [dropCelebration, setDropCelebration] =
     useState<DropCelebration | null>(null);
@@ -1335,6 +1339,14 @@ export function TasksList({
         <div className="dashboard-reveal-columns grid min-w-0 grid-cols-1 items-start gap-4 pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0">
           {taskSectionOrder.map((section, index) => {
             const tasksByBucket = groupedTasks[section];
+            const isSectionExpanded = expandedTaskSections[section] ?? false;
+            const hiddenTaskCount = Math.max(
+              tasksByBucket.length - maxVisibleTasksPerColumn,
+              0,
+            );
+            const visibleTasksByBucket = isSectionExpanded
+              ? tasksByBucket
+              : tasksByBucket.slice(0, maxVisibleTasksPerColumn);
 
             return (
               <Fragment key={section}>
@@ -1373,7 +1385,7 @@ export function TasksList({
                       Arraste uma tarefa para cá
                     </li>
                   ) : null}
-                    {tasksByBucket.map((task) => {
+                    {visibleTasksByBucket.map((task) => {
                       const isCompleted = task.status === "completed";
                       const isBusy = busyTaskId === task.id;
                       const isEditing =
@@ -1642,6 +1654,35 @@ export function TasksList({
                         </li>
                       );
                     })}
+                    {hiddenTaskCount > 0 ? (
+                      <li className="pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-10 w-full rounded-2xl text-xs"
+                          aria-expanded={isSectionExpanded}
+                          onClick={() =>
+                            setExpandedTaskSections((current) => ({
+                              ...current,
+                              [section]: !(current[section] ?? false),
+                            }))
+                          }
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                        >
+                          {isSectionExpanded
+                            ? "Mostrar apenas 10"
+                            : `Ver mais ${hiddenTaskCount} ${hiddenTaskCount === 1 ? "tarefa" : "tarefas"}`}
+                        </Button>
+                      </li>
+                    ) : null}
                   </ul>
                 </section>
                 {index < taskSectionOrder.length - 1 ? (

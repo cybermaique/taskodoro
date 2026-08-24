@@ -1275,7 +1275,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   };
 
   return (
-    <div className="dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
+    <div className="app-notes-live dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
         <DialogContent className="flex h-svh max-h-svh w-screen max-w-none flex-col overflow-y-auto rounded-none border-slate-900/10 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-6">
           <DialogTitle className="text-xl">Nova anotação</DialogTitle>
