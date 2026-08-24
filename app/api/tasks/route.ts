@@ -43,7 +43,12 @@ export async function POST(request: NextRequest) {
       body.type === "bug" ||
       body.type === "improvement" ||
       body.type === "task" ||
-      body.type === "date"
+      body.type === "date" ||
+      body.type === "study" ||
+      body.type === "travel" ||
+      body.type === "health" ||
+      body.type === "finance" ||
+      body.type === "personal"
         ? (body.type as TaskType)
         : undefined;
     const subtasks = Array.isArray(body.subtasks)

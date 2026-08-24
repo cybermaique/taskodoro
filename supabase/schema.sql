@@ -8,7 +8,7 @@ create table if not exists public.tasks (
   description text,
   status text not null default 'not_started' check (status in ('not_started', 'in_progress', 'waiting', 'completed')),
   priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
-  type text not null default 'task' check (type in ('feature', 'bug', 'improvement', 'task', 'date')),
+  type text not null default 'task' check (type in ('feature', 'bug', 'improvement', 'task', 'date', 'study', 'travel', 'health', 'finance', 'personal')),
   category text,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
@@ -23,11 +23,20 @@ create table if not exists public.task_status_history (
   changed_at timestamptz not null default now()
 );
 
+create table if not exists public.task_description_history (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  description text,
+  changed_at timestamptz not null default now()
+);
+
 create table if not exists public.subtasks (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.tasks(id) on delete cascade,
   title text not null,
   is_completed boolean not null default false,
+  completed_at timestamptz,
+  position integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -67,7 +76,10 @@ create index if not exists idx_tasks_type on public.tasks (type);
 create index if not exists idx_tasks_category on public.tasks (category);
 create index if not exists idx_task_status_history_task_id_changed_at
   on public.task_status_history (task_id, changed_at asc);
+create index if not exists idx_task_description_history_task_id_changed_at
+  on public.task_description_history (task_id, changed_at desc);
 create index if not exists idx_subtasks_task_id on public.subtasks (task_id);
+create index if not exists idx_subtasks_task_id_position on public.subtasks (task_id, position);
 create index if not exists idx_task_attachments_task_id on public.task_attachments (task_id);
 
 create or replace function public.set_updated_at()
@@ -110,6 +122,29 @@ create trigger tasks_status_history
 after insert or update of status on public.tasks
 for each row
 execute function public.record_task_status_history();
+
+create or replace function public.record_master_task_description_history()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if lower(coalesce(auth.jwt() ->> 'email', '')) = 'maiqued.18@gmail.com'
+    and new.description is distinct from old.description then
+    insert into public.task_description_history (task_id, description)
+    values (old.id, old.description);
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists tasks_master_description_history on public.tasks;
+create trigger tasks_master_description_history
+after update of description on public.tasks
+for each row
+execute function public.record_master_task_description_history();
 
 drop trigger if exists subtasks_set_updated_at on public.subtasks;
 create trigger subtasks_set_updated_at
@@ -191,6 +226,7 @@ alter table public.notes enable row level security;
 alter table public.subtasks enable row level security;
 alter table public.task_attachments enable row level security;
 alter table public.task_status_history enable row level security;
+alter table public.task_description_history enable row level security;
 
 drop policy if exists "Usuários acessam as próprias tarefas" on public.tasks;
 create policy "Usuários acessam as próprias tarefas" on public.tasks for all to authenticated
@@ -219,3 +255,8 @@ drop policy if exists "task_status_history_user_access" on public.task_status_hi
 create policy "task_status_history_user_access" on public.task_status_history for all to authenticated
 using (exists (select 1 from public.tasks where tasks.id = task_status_history.task_id and tasks.user_id = auth.uid()))
 with check (exists (select 1 from public.tasks where tasks.id = task_status_history.task_id and tasks.user_id = auth.uid()));
+
+drop policy if exists "master_accesses_task_description_history" on public.task_description_history;
+create policy "master_accesses_task_description_history" on public.task_description_history
+for select to authenticated
+using (lower(coalesce(auth.jwt() ->> 'email', '')) = 'maiqued.18@gmail.com');
