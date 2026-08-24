@@ -18,6 +18,8 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  Bug,
+  Heart,
   Circle,
   CirclePlus,
   CalendarDays,
@@ -30,6 +32,9 @@ import {
   ImagePlus,
   FileText,
   Loader2,
+  Lightbulb,
+  ListTodo,
+  Sparkles,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -59,11 +64,13 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { getTaskTypeOptions, TASK_TYPE_OPTIONS } from "@/types/task";
 import type {
   Task,
   TaskAttachment,
   TaskPriority,
   TaskStatusHistory,
+  TaskType,
   TaskView,
 } from "@/types/task";
 import type { TaskColumnWidths } from "@/types/profile";
@@ -102,6 +109,7 @@ interface EditingState {
   description: string;
   category: string;
   priority: TaskPriority;
+  type: TaskType;
 }
 
 interface TaskContextMenuState {
@@ -148,6 +156,50 @@ function getStatusLabel(status: Task["status"]) {
   }
 
   return "Não iniciada";
+}
+
+function getTaskTypeLabel(type: TaskType) {
+  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Tarefa";
+}
+
+function getTaskTypeClass(type: TaskType) {
+  if (type === "bug") {
+    return "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200";
+  }
+
+  if (type === "feature") {
+    return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-200";
+  }
+
+  if (type === "improvement") {
+    return "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200";
+  }
+
+  if (type === "date") {
+    return "border-pink-500/30 bg-pink-500/10 text-pink-700 dark:text-pink-200";
+  }
+
+  return "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-200";
+}
+
+function TaskTypeBadge({ taskType }: { taskType: TaskType }) {
+  const Icon =
+    taskType === "bug"
+      ? Bug
+      : taskType === "feature"
+      ? Sparkles
+      : taskType === "improvement"
+        ? Lightbulb
+        : taskType === "date"
+          ? Heart
+          : ListTodo;
+
+  return (
+    <Badge className={`gap-1 ${getTaskTypeClass(taskType)}`}>
+      <Icon className="size-3" />
+      {getTaskTypeLabel(taskType)}
+    </Badge>
+  );
 }
 
 function getTaskHistory(task: Task): TaskStatusHistory[] {
@@ -517,6 +569,30 @@ function saveTaskOrder(order: string[]) {
   window.localStorage.setItem(taskOrderStorageKey, JSON.stringify(order));
 }
 
+function getOrderWithTaskNearTask(
+  order: string[],
+  tasks: Task[],
+  taskId: string,
+  targetTaskId: string,
+  insertAfter: boolean,
+) {
+  if (taskId === targetTaskId) {
+    return null;
+  }
+
+  const currentIds = normalizeTaskOrder(order, tasks);
+  const nextOrder = currentIds.filter((currentTaskId) => currentTaskId !== taskId);
+  const targetIndex = nextOrder.indexOf(targetTaskId);
+
+  if (targetIndex === -1) {
+    return null;
+  }
+
+  nextOrder.splice(targetIndex + (insertAfter ? 1 : 0), 0, taskId);
+
+  return areEqualStringArrays(currentIds, nextOrder) ? null : nextOrder;
+}
+
 export function TasksList({
   tasks,
   newlyCreatedTaskId = null,
@@ -799,6 +875,7 @@ export function TasksList({
       description: task.description ?? "",
       category: task.category ?? "",
       priority: task.priority,
+      type: task.type,
     });
   };
 
@@ -820,46 +897,46 @@ export function TasksList({
     setSubtaskDraftByTaskId((current) => ({ ...current, [taskId]: "" }));
   };
 
-  const moveTaskBefore = (taskId: string, targetTaskId: string) => {
-    if (taskId === targetTaskId) {
-      return;
+  const moveTaskNearTask = (
+    taskId: string,
+    targetTaskId: string,
+    insertAfter: boolean,
+  ) => {
+    const nextOrder = getOrderWithTaskNearTask(
+      normalizedTaskOrder,
+      tasks,
+      taskId,
+      targetTaskId,
+      insertAfter,
+    );
+
+    if (!nextOrder) {
+      return false;
     }
 
-    if (!tasks.some((task) => task.id === taskId) || !tasks.some((task) => task.id === targetTaskId)) {
-      return;
-    }
-
-    setTaskOrder((current) => {
-      const currentIds = normalizeTaskOrder(current, tasks);
-      const nextOrder = currentIds.filter(
-        (currentTaskId) => currentTaskId !== taskId,
-      );
-      const targetIndex = nextOrder.indexOf(targetTaskId);
-
-      if (targetIndex === -1) {
-        return current;
-      }
-
-      nextOrder.splice(targetIndex, 0, taskId);
-      saveTaskOrder(nextOrder);
-      return nextOrder;
-    });
+    setTaskOrder(nextOrder);
+    saveTaskOrder(nextOrder);
+    return true;
   };
 
   const moveTaskToEnd = (taskId: string) => {
     if (!tasks.some((task) => task.id === taskId)) {
-      return;
+      return false;
     }
 
-    setTaskOrder((current) => {
-      const currentIds = normalizeTaskOrder(current, tasks);
-      const nextOrder = currentIds.filter(
-        (currentTaskId) => currentTaskId !== taskId,
-      );
-      nextOrder.push(taskId);
-      saveTaskOrder(nextOrder);
-      return nextOrder;
-    });
+    const currentIds = normalizeTaskOrder(normalizedTaskOrder, tasks);
+    const nextOrder = currentIds.filter(
+      (currentTaskId) => currentTaskId !== taskId,
+    );
+    nextOrder.push(taskId);
+
+    if (areEqualStringArrays(currentIds, nextOrder)) {
+      return false;
+    }
+
+    setTaskOrder(nextOrder);
+    saveTaskOrder(nextOrder);
+    return true;
   };
 
   const handleDragStart = (event: DragEvent<HTMLElement>, taskId: string) => {
@@ -974,11 +1051,19 @@ export function TasksList({
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
       const targetTask = tasks.find((task) => task.id === targetTaskId);
-      if (
-        !taskToMove ||
-        !targetTask ||
-        taskToMove.status === targetTask.status
-      ) {
+      if (!taskToMove || !targetTask) {
+        return;
+      }
+
+      const targetRect = event.currentTarget.getBoundingClientRect();
+      const insertAfter = event.clientY > targetRect.top + targetRect.height / 2;
+
+      if (taskToMove.status === targetTask.status) {
+        if (!moveTaskNearTask(taskId, targetTaskId, insertAfter)) {
+          return;
+        }
+
+        celebrateDrop(taskId, dropPoint, "move");
         return;
       }
 
@@ -987,7 +1072,7 @@ export function TasksList({
       });
       if (!wasUpdated) return;
 
-      moveTaskBefore(taskId, targetTaskId);
+      moveTaskNearTask(taskId, targetTaskId, insertAfter);
       celebrateDrop(
         taskId,
         dropPoint,
@@ -1011,7 +1096,20 @@ export function TasksList({
 
     if (taskId) {
       const taskToMove = tasks.find((task) => task.id === taskId);
-      if (!taskToMove || taskToMove.status === status) {
+      if (!taskToMove) {
+        return;
+      }
+
+      if (taskToMove.status === status) {
+        const columnTasks = groupedTasks[status];
+        const isAlreadyLast =
+          columnTasks[columnTasks.length - 1]?.id === taskId;
+
+        if (isAlreadyLast || !moveTaskToEnd(taskId)) {
+          return;
+        }
+
+        celebrateDrop(taskId, dropPoint, "move");
         return;
       }
 
@@ -1400,6 +1498,7 @@ export function TasksList({
                               >
                                 {task.title}
                               </button>
+                              <TaskTypeBadge taskType={task.type} />
                               <TaskCreationDate task={task} />
                             </div>
                           ) : (
@@ -1434,6 +1533,7 @@ export function TasksList({
                                       description:
                                         editingState.description.trim() || null,
                                       priority: editingState.priority,
+                                      type: editingState.type,
                                       category:
                                         editingState.category.trim() || null,
                                     });
@@ -1490,6 +1590,7 @@ export function TasksList({
                                     >
                                       {getPriorityLabel(task.priority)}
                                     </Badge>
+                                    <TaskTypeBadge taskType={task.type} />
                                     {task.category ? (
                                       <Badge
                                         variant="outline"
@@ -1623,6 +1724,7 @@ export function TasksList({
             title: nextTitle,
             description: editingState.description.trim() || null,
             priority: editingState.priority,
+            type: editingState.type,
             category: editingState.category.trim() || null,
           });
           if (!taskWasUpdated) return;
@@ -1858,6 +1960,7 @@ function TaskDetailsDialog({
                 <Badge className={taskSectionStyles[task.status]}>
                   {getStatusLabel(task.status)}
                 </Badge>
+                <TaskTypeBadge taskType={task.type} />
                 <Badge className={getPriorityClass(task.priority)}>
                   {getPriorityLabel(task.priority)}
                 </Badge>
@@ -2273,7 +2376,8 @@ function TaskEditForm({
     editingState.title !== task.title ||
     editingState.description !== (task.description ?? "") ||
     editingState.category !== (task.category ?? "") ||
-    editingState.priority !== task.priority;
+    editingState.priority !== task.priority ||
+    editingState.type !== task.type;
   const hasChanges =
     hasDetailChanges ||
     pendingAttachments.length > 0 ||
@@ -2452,7 +2556,7 @@ function TaskEditForm({
         ) : null}
       </div>
 
-      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-3">
         <Select
           value={editingState.priority}
           disabled={isSaving}
@@ -2479,14 +2583,52 @@ function TaskEditForm({
           </SelectContent>
         </Select>
 
+        <Select
+          value={editingState.type}
+          disabled={isSaving}
+          onValueChange={(value) =>
+            setEditingState((current) =>
+              current
+                ? {
+                    ...current,
+                    type: (value ?? "task") as TaskType,
+                  }
+                : current,
+            )
+          }
+        >
+          <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none sm:h-10 dark:border-white/10 dark:bg-black/20">
+            <span className="flex h-full items-center text-sm">
+              {getTaskTypeLabel(editingState.type)}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            {getTaskTypeOptions(editingState.category).map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Input
           className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white text-base shadow-none sm:h-10 sm:text-sm dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
           value={editingState.category}
           disabled={isSaving}
           onChange={(event) =>
-            setEditingState((current) =>
-              current ? { ...current, category: event.target.value } : current,
-            )
+            setEditingState((current) => {
+              if (!current) return current;
+              const category = event.target.value;
+              return {
+                ...current,
+                category,
+                type: getTaskTypeOptions(category).some(
+                  (option) => option.value === current.type,
+                )
+                  ? current.type
+                  : "task",
+              };
+            })
           }
           placeholder="Categoria"
           list="category-suggestions-edit"

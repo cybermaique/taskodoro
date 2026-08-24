@@ -4,6 +4,21 @@ export type TaskStatus =
   | "waiting"
   | "completed";
 export type TaskPriority = "low" | "medium" | "high";
+export type TaskType = "feature" | "bug" | "improvement" | "task" | "date";
+
+export const TASK_TYPE_OPTIONS = [
+  { value: "feature", label: "Feature" },
+  { value: "bug", label: "Bug" },
+  { value: "improvement", label: "Melhoria" },
+  { value: "task", label: "Tarefa" },
+  { value: "date", label: "Date" },
+] as const satisfies ReadonlyArray<{ value: TaskType; label: string }>;
+
+export function getTaskTypeOptions(category: string | null | undefined) {
+  return category?.trim().toLocaleLowerCase("pt-BR") === "pessoal"
+    ? TASK_TYPE_OPTIONS
+    : TASK_TYPE_OPTIONS.filter((option) => option.value !== "date");
+}
 
 export interface Subtask {
   id: string;
@@ -37,6 +52,7 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  type: TaskType;
   category: string | null;
   created_at: string;
   completed_at: string | null;
@@ -52,6 +68,7 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   priority?: TaskPriority;
+  type?: TaskType;
   category?: string | null;
   subtasks?: string[];
 }
@@ -61,6 +78,7 @@ export interface UpdateTaskInput {
   description?: string | null;
   status?: TaskStatus;
   priority?: TaskPriority;
+  type?: TaskType;
   category?: string | null;
 }
 

@@ -1881,7 +1881,7 @@
 
 .app-column-live::before {
   position: absolute;
-  top: 0;
+  top: -4px;
   left: -20%;
   z-index: 2;
   width: 24%;
@@ -2065,6 +2065,25 @@
   }
 }
 
+@keyframes profile-account-idle-presence {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--profile-accent) 58%, white 8%);
+    box-shadow:
+      0 9px 27px rgb(15 23 42 / 12%),
+      0 0 16px var(--profile-accent-soft);
+    transform: translateY(0);
+  }
+
+  50% {
+    border-color: color-mix(in srgb, var(--profile-accent) 78%, white 14%);
+    box-shadow:
+      0 12px 32px rgb(15 23 42 / 16%),
+      0 0 30px var(--profile-accent-soft);
+    transform: translateY(-1px);
+  }
+}
+
 @keyframes profile-avatar-ring {
   0%,
   100% {
@@ -2075,6 +2094,61 @@
   50% {
     opacity: 0.9;
     transform: scale(1.08);
+  }
+}
+
+@keyframes profile-account-avatar-presence {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--profile-accent-faint),
+      0 0 12px var(--profile-accent-soft);
+    transform: scale(1) rotate(0deg);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 4px var(--profile-accent-soft),
+      0 0 24px var(--profile-accent-soft);
+    transform: scale(1.055) rotate(-2deg);
+  }
+}
+
+@keyframes profile-avatar-aura-spin {
+  from {
+    opacity: 0.4;
+    transform: rotate(0deg) scale(0.92);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: rotate(180deg) scale(1.05);
+  }
+
+  to {
+    opacity: 0.4;
+    transform: rotate(360deg) scale(0.92);
+  }
+}
+
+@keyframes profile-avatar-pulse {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  18% {
+    opacity: 0.72;
+  }
+
+  62% {
+    opacity: 0.14;
+  }
+
+  78% {
+    opacity: 0;
+    transform: scale(1.36);
   }
 }
 
@@ -2196,6 +2270,7 @@
     var(--profile-accent-faint)
   );
   box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+  animation: profile-account-idle-presence 3.8s ease-in-out infinite;
 }
 
 .dark .profile-account-trigger {
@@ -2324,6 +2399,7 @@
     0 10px 30px rgb(15 23 42 / 14%),
     0 0 24px var(--profile-accent-soft);
   transform: translateY(-1px);
+  animation: none;
 }
 
 .profile-account-trigger[data-open="true"]::after {
@@ -2338,14 +2414,57 @@
 }
 
 .profile-account-avatar-ring {
+  z-index: 2;
   pointer-events: none;
   animation: profile-avatar-ring 3.2s ease-in-out infinite;
+}
+
+.profile-account-avatar-aura {
+  position: absolute;
+  inset: -0.48rem;
+  z-index: 0;
+  border-radius: 999px;
+  background: conic-gradient(
+    from 40deg,
+    transparent 0deg 24deg,
+    var(--profile-accent) 48deg,
+    rgb(255 255 255 / 90%) 72deg,
+    var(--profile-accent-soft) 106deg,
+    transparent 142deg 212deg,
+    var(--profile-accent-faint) 242deg,
+    var(--profile-accent) 282deg,
+    transparent 322deg
+  );
+  filter: blur(0.7px) drop-shadow(0 0 5px var(--profile-accent-soft));
+  -webkit-mask: radial-gradient(circle, transparent 56%, black 62%, black 69%, transparent 75%);
+  mask: radial-gradient(circle, transparent 56%, black 62%, black 69%, transparent 75%);
+  pointer-events: none;
+  animation: profile-avatar-aura-spin 5.8s linear infinite;
+}
+
+.profile-account-avatar-pulse,
+.profile-account-avatar-pulse::after {
+  position: absolute;
+  inset: -0.38rem;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--profile-accent) 72%, white 12%);
+  border-radius: 999px;
+  box-shadow: 0 0 12px var(--profile-accent-soft);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  animation: profile-avatar-pulse 4.6s cubic-bezier(0.16, 0.82, 0.2, 1) infinite;
+}
+
+.profile-account-avatar-pulse::after {
+  inset: 0;
+  animation-delay: -2.3s;
 }
 
 .profile-account-avatar-orbit {
   position: absolute;
   inset: -4px;
-  z-index: 2;
+  z-index: 3;
   border-radius: 999px;
   pointer-events: none;
 }
@@ -2381,12 +2500,14 @@
 .profile-account-trigger .profile-account-avatar {
   transition: transform 240ms cubic-bezier(0.16, 0.82, 0.2, 1),
     box-shadow 240ms ease;
+  animation: profile-account-avatar-presence 3.8s ease-in-out infinite;
 }
 
 .profile-account-trigger:hover .profile-account-avatar,
 .profile-account-trigger[data-open="true"] .profile-account-avatar {
   box-shadow: 0 0 0 3px var(--profile-accent-soft), 0 0 18px var(--profile-accent-soft);
   transform: scale(1.06) rotate(-2deg);
+  animation: none;
 }
 
 .task-form-success {
@@ -3499,20 +3620,6 @@
 
   .app-sound-toggle-active svg,
   .app-sound-toggle-active .app-sound-wave {
-    animation: none;
-  }
-
-  .profile-account-trigger::before,
-  .profile-account-trigger::after,
-  .profile-account-trigger[data-open="true"]::after,
-  .profile-account-avatar-ring,
-  .profile-account-laser,
-  .profile-account-edge-run,
-  .profile-account-energy::before,
-  .profile-account-energy-wave,
-  .profile-account-avatar-orbit,
-  .profile-account-eyebrow,
-  .profile-account-chevron {
     animation: none;
   }
 

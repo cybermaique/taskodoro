@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Flag,
   Folder,
+  Tags,
   ListChecks,
   Paperclip,
   Plus,
@@ -31,12 +32,18 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
-import type { TaskPriority } from "@/types/task";
+import {
+  getTaskTypeOptions,
+  TASK_TYPE_OPTIONS,
+  type TaskPriority,
+  type TaskType,
+} from "@/types/task";
 
 interface TaskFormValues {
   title: string;
   description: string;
   priority: TaskPriority;
+  type: TaskType;
   category: string;
 }
 
@@ -49,6 +56,7 @@ interface TaskFormProps {
     title: string;
     description?: string;
     priority?: TaskPriority;
+    type?: TaskType;
     category?: string | null;
     attachments?: File[];
     subtasks?: string[];
@@ -59,11 +67,20 @@ const EMPTY_VALUES: TaskFormValues = {
   title: "",
   description: "",
   priority: "medium",
+  type: "task",
   category: "trabalho",
 };
 
-const compactFieldClass =
-  "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white pl-10 pr-3 text-base shadow-none sm:text-sm dark:border-white/10 dark:bg-black/20";
+const DATE_DESCRIPTION_TEMPLATE = `Onde:
+Mora:
+Trabalho:
+Idade:
+Signo:
+Trabalho:
+Tem filho:
+Nota sexo:
+Nota pessoal:`;
+
 const compactSelectClass =
   "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white py-0 pl-10 pr-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20";
 
@@ -77,6 +94,10 @@ function getPriorityLabel(priority: TaskPriority) {
   }
 
   return "Média";
+}
+
+function getTaskTypeLabel(type: TaskType) {
+  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Tarefa";
 }
 
 export function TaskForm({
@@ -95,11 +116,13 @@ export function TaskForm({
   const [justCreated, setJustCreated] = useState(false);
   const successTimeoutRef = useRef<number | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const availableTaskTypes = getTaskTypeOptions(values.category);
 
   const isDirty =
     values.title !== EMPTY_VALUES.title ||
     values.description !== EMPTY_VALUES.description ||
     values.priority !== EMPTY_VALUES.priority ||
+    values.type !== EMPTY_VALUES.type ||
     values.category !== EMPTY_VALUES.category ||
     attachments.length > 0 ||
     subtasks.length > 0 ||
@@ -210,6 +233,7 @@ export function TaskForm({
         title,
         description: values.description.trim() || undefined,
         priority: values.priority,
+        type: values.type,
         category: values.category.trim() || null,
         attachments: attachments.length ? attachments : undefined,
         subtasks: subtasksToCreate.length ? subtasksToCreate : undefined,
@@ -496,27 +520,74 @@ export function TaskForm({
           </label>
 
           <label className="relative min-w-0">
-            <Folder className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              className={`${compactFieldClass} disabled:opacity-60`}
-              list="category-suggestions"
+            <Tags className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Select
+              value={values.type}
               disabled={isSubmitting}
-              placeholder="Categoria"
-              value={values.category}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  category: event.target.value,
-                }))
+              onValueChange={(value) =>
+                setValues((current) => {
+                  const type = (value ?? "task") as TaskType;
+                  return {
+                    ...current,
+                    type,
+                    description:
+                      type === "date"
+                        ? DATE_DESCRIPTION_TEMPLATE
+                        : current.description,
+                  };
+                })
               }
-            />
+            >
+              <SelectTrigger className={compactSelectClass}>
+                <span className="flex h-full items-center text-sm">
+                  {getTaskTypeLabel(values.type)}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {availableTaskTypes.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
 
-          <datalist id="category-suggestions">
-            {categorySuggestions.map((category) => (
-              <option key={category} value={category} />
-            ))}
-          </datalist>
+          <label className="relative min-w-0">
+            <Folder className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Select
+              value={values.category}
+              disabled={isSubmitting}
+              onValueChange={(value) =>
+                setValues((current) => {
+                  const category = value ?? "trabalho";
+                  return {
+                    ...current,
+                    category,
+                    type:
+                      getTaskTypeOptions(category).some(
+                        (option) => option.value === current.type,
+                      )
+                        ? current.type
+                        : "task",
+                  };
+                })
+              }
+            >
+              <SelectTrigger aria-label="Categoria" className={compactSelectClass}>
+                <span className="flex h-full items-center text-sm">
+                  {values.category}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {categorySuggestions.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
         </div>
 
         {errorMessage ? (
