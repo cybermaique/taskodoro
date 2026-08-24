@@ -367,6 +367,8 @@ export function ProfileSettings({
           <span
             className={`profile-account-avatar relative z-10 grid size-11 shrink-0 place-items-center rounded-full border text-xs font-bold sm:size-10 ${getAccentClasses(displayAccent)}`}
           >
+            <span className="profile-account-avatar-aura" aria-hidden="true" />
+            <span className="profile-account-avatar-pulse" aria-hidden="true" />
             <span
               className="profile-account-avatar-ring absolute -inset-1 rounded-full border border-current"
               aria-hidden="true"
