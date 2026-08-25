@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { NotesPanel } from "@/components/notes-panel";
+import { CompactJoyField } from "@/components/compact-joy-field";
 import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
@@ -637,7 +638,12 @@ export function Dashboard({
         <span className="dashboard-boot-orb dashboard-boot-orb-secondary" />
         <span className="dashboard-boot-scan" />
       </div>
-      <div className="dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col gap-4 sm:gap-6">
+      <div
+        className={[
+          "dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col",
+          isCompact ? "gap-0" : "gap-4 sm:gap-6",
+        ].join(" ")}
+      >
         <header
           className={[
             "dashboard-reveal-header grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
@@ -699,6 +705,8 @@ export function Dashboard({
             />
           </div>
         </header>
+
+        {isCompact ? <CompactJoyField /> : null}
 
         {errorMessage ? (
           <Alert variant="destructive" className="app-message-enter">
