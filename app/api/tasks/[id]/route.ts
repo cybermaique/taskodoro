@@ -34,7 +34,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       body.type === "bug" ||
       body.type === "improvement" ||
       body.type === "task" ||
-      body.type === "date"
+      body.type === "date" ||
+      body.type === "study" ||
+      body.type === "travel" ||
+      body.type === "health" ||
+      body.type === "finance" ||
+      body.type === "personal"
         ? (body.type as TaskType)
         : undefined;
     const task = await updateTask(id, {

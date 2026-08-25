@@ -28,18 +28,6 @@ import type { Profile, ProfileDisplayMode } from "@/types/profile";
 import type { Task, TaskPriority, TaskType } from "@/types/task";
 
 const APP_TITLE = "Taskboard";
-const DEFAULT_CATEGORIES = [
-  "trabalho",
-  "pessoal",
-  "saúde",
-  "casa",
-  "financeiro",
-  "estudo",
-  "viagem",
-  "conteúdo",
-  "outros",
-];
-
 function sortByMostRecent(tasks: Task[]) {
   return [...tasks].sort(
     (left, right) =>
@@ -110,14 +98,6 @@ export function Dashboard({
   const isCompact = displayMode === "compact";
   const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
   const greetedProfileIdRef = useRef<string | null>(null);
-
-  const categorySuggestions = useMemo(() => {
-    const fromTasks = tasks
-      .map((task) => task.category)
-      .filter((category): category is string => Boolean(category));
-
-    return Array.from(new Set([...DEFAULT_CATEGORIES, ...fromTasks]));
-  }, [tasks]);
 
   useEffect(() => {
     if (!profile) return;
@@ -489,6 +469,71 @@ export function Dashboard({
     setSelectedTab(nextTab);
   };
 
+  const restoreTaskDescription = async (taskId: string, historyId: string) => {
+    setBusyTaskId(taskId);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/tasks/${taskId}/description-history/${historyId}/restore`,
+        { method: "POST" },
+      );
+      const data = (await response.json()) as { task?: Task; error?: string };
+
+      if (!response.ok || !data.task) {
+        throw new Error(data.error ?? "Não foi possível restaurar a descrição.");
+      }
+
+      setTasks((current) => upsertTask(current, data.task as Task));
+      toast.success("Descrição restaurada!");
+      return true;
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : "Erro ao restaurar descrição.";
+      setErrorMessage(msg);
+      toast.error(msg);
+      return false;
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
+
+  const reorderSubtasks = async (
+    taskId: string,
+    subtaskIds: string[],
+  ): Promise<boolean> => {
+    setBusyTaskId(taskId);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/subtasks/reorder`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ subtask_ids: subtaskIds }),
+      });
+      const data = (await response.json()) as { task?: Task; error?: string };
+
+      if (!response.ok || !data.task) {
+        throw new Error(data.error ?? "Não foi possível reordenar as subtarefas.");
+      }
+
+      setTasks((current) => upsertTask(current, data.task as Task));
+      return true;
+    } catch (error) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : "Erro ao reordenar subtarefas.";
+      setErrorMessage(msg);
+      toast.error(msg);
+      return false;
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
+
   const handleTaskCreateDialogChange = (open: boolean) => {
     if (!open && hasUnsavedTaskForm) {
       setPendingConfirmation({ kind: "close-task-create" });
@@ -628,16 +673,17 @@ export function Dashboard({
                   onColumnWidthsChange={(widths) =>
                     onProfilePreferenceChange({ task_column_widths: widths })
                   }
-                  categorySuggestions={categorySuggestions}
                   onRequestCreate={() => setTaskCreateOpen(true)}
                   onEditDirtyChange={setHasUnsavedTaskEdit}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTaskWithBusy}
+                  onRestoreTaskDescription={restoreTaskDescription}
                   onAddAttachment={addTaskAttachment}
                   onDeleteAttachment={deleteTaskAttachment}
                   onCreateSubtask={createSubtask}
                   onToggleSubtask={toggleSubtask}
                   onDeleteSubtask={deleteSubtask}
+                  onReorderSubtasks={reorderSubtasks}
                 />
               </div>
             </section>
@@ -660,7 +706,6 @@ export function Dashboard({
             <TaskForm
               isSubmitting={creatingTask}
               isCompact={false}
-              categorySuggestions={categorySuggestions}
               onDirtyChange={setHasUnsavedTaskForm}
               onCreate={createTask}
             />
