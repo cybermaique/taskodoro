@@ -25,6 +25,7 @@ import {
   Trash2,
   X,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -788,6 +789,7 @@ function NoteCard({
             </div>
           </div>
           <div className="space-y-3">{renderNoteContent()}</div>
+          {note.attachments.length ? <div className="mt-3 flex flex-wrap gap-2">{note.attachments.map((attachment) => <a key={attachment.id} href={`/api/notes/${note.id}/attachments/${attachment.id}`} target="_blank" className="max-w-48 truncate rounded-full border border-violet-500/25 px-2 py-1 text-xs text-violet-700 dark:text-violet-200" title={attachment.file_name}>{attachment.file_name}</a>)}</div> : null}
         </div>
       )}
 
@@ -1001,6 +1003,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createCloseConfirmationOpen, setCreateCloseConfirmationOpen] =
@@ -1103,7 +1106,15 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       const data = (await res.json()) as { note?: Note; error?: string };
       if (!res.ok || !data.note)
         throw new Error(data.error ?? "Erro ao salvar.");
-      setNotes((prev) => [data.note as Note, ...prev]);
+      let note = { ...(data.note as Note), attachments: (data.note as Note).attachments ?? [] };
+      for (const attachment of attachments) {
+        const formData = new FormData(); formData.append("file", attachment);
+        const upload = await fetch(`/api/notes/${note.id}/attachments`, { method: "POST", body: formData });
+        const uploadData = (await upload.json()) as { note?: Note; error?: string };
+        if (!upload.ok || !uploadData.note) throw new Error(uploadData.error ?? "A anotação foi criada, mas o anexo falhou.");
+        note = uploadData.note;
+      }
+      setNotes((prev) => [note, ...prev]);
       setNewlyCreatedNoteId(data.note.id);
       if (newNoteTimeoutRef.current !== null) {
         window.clearTimeout(newNoteTimeoutRef.current);
@@ -1114,6 +1125,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       }, 2200);
       setTitleDraft("");
       setDraft("");
+      setAttachments([]);
       setCreateDialogOpen(false);
       toast.success("Anotação criada!");
     } catch (e) {
@@ -1302,6 +1314,10 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
               className="min-h-72 min-w-0 max-h-[calc(100svh-12rem)] flex-1 resize-y overflow-y-auto rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-0 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
               rows={12}
             />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+              <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 hover:bg-slate-900/5 dark:hover:bg-white/10"><Paperclip className="size-3" /> Anexar arquivos<input type="file" multiple className="sr-only" onChange={(event) => setAttachments((current) => [...current, ...Array.from(event.target.files ?? [])])} /></label>
+              {attachments.map((file, index) => <span key={`${file.name}-${index}`} className="max-w-44 truncate" title={file.name}>{file.name}</span>)}
+            </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 size="sm"

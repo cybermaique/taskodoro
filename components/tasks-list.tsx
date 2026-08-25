@@ -18,6 +18,8 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Bug,
   Heart,
   Circle,
@@ -78,13 +80,13 @@ import {
   getDefaultTaskType,
   getTaskCategoryLabel,
   getTaskTypeOptions,
-  DATE_DESCRIPTION_TEMPLATE,
   TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
 } from "@/types/task";
 import type {
   Task,
   TaskAttachment,
+  DateDetails,
   TaskDescriptionHistory,
   TaskPriority,
   TaskStatusHistory,
@@ -115,8 +117,12 @@ interface TasksListProps {
   onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   onCreateSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
+  onRenameSubtask: (subtaskId: string, title: string) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
   onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
+  onReorderTasks: (taskIds: string[]) => Promise<void>;
+  onAddTaskComment: (taskId: string, content: string) => Promise<void>;
+  onDeleteTaskComment: (taskId: string, commentId: string) => Promise<void>;
 }
 
 type PriorityFilter = "all" | TaskPriority;
@@ -577,22 +583,7 @@ function areEqualStringArrays(left: string[], right: string[]) {
 }
 
 function readStoredTaskOrder() {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const stored = window.localStorage.getItem(taskOrderStorageKey);
-    const parsed = stored ? (JSON.parse(stored) as unknown) : null;
-
-    return Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "string")
-      ? parsed
-      : [];
-  } catch {
-    window.localStorage.removeItem(taskOrderStorageKey);
-    return [];
-  }
+  return [];
 }
 
 function normalizeTaskOrder(order: string[], tasks: Task[]) {
@@ -648,8 +639,12 @@ export function TasksList({
   onDeleteAttachment,
   onCreateSubtask,
   onToggleSubtask,
+  onRenameSubtask,
   onDeleteSubtask,
   onReorderSubtasks,
+  onReorderTasks,
+  onAddTaskComment,
+  onDeleteTaskComment,
 }: TasksListProps) {
   const [viewFilter, setViewFilter] = useState<TaskView>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
@@ -935,6 +930,7 @@ export function TasksList({
 
     setTaskOrder(nextOrder);
     saveTaskOrder(nextOrder);
+    void onReorderTasks(nextOrder);
     return true;
   };
 
@@ -955,6 +951,7 @@ export function TasksList({
 
     setTaskOrder(nextOrder);
     saveTaskOrder(nextOrder);
+    void onReorderTasks(nextOrder);
     return true;
   };
 
@@ -1467,12 +1464,14 @@ export function TasksList({
                                 event.stopPropagation();
                               }}
                               onClick={(event) => event.stopPropagation()}
-      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
+      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 max-md:translate-y-0 max-md:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
                             >
                               <TaskHistoryAction
                                 task={task}
                                 onClick={() => setHistoryTaskId(task.id)}
                               />
+                              <TaskCardAction label="Mover para cima" disabled={isBusy || groupedTasks[task.status][0]?.id === task.id} onClick={() => { const items = groupedTasks[task.status]; const index = items.findIndex((item) => item.id === task.id); if (index > 0) moveTaskNearTask(task.id, items[index - 1].id, false); }}><ArrowUp className="size-3.5" /></TaskCardAction>
+                              <TaskCardAction label="Mover para baixo" disabled={isBusy || groupedTasks[task.status].at(-1)?.id === task.id} onClick={() => { const items = groupedTasks[task.status]; const index = items.findIndex((item) => item.id === task.id); if (index >= 0 && index < items.length - 1) moveTaskNearTask(task.id, items[index + 1].id, true); }}><ArrowDown className="size-3.5" /></TaskCardAction>
                               <TaskCardAction
                                 label="Editar tarefa"
                                 onClick={() => startEdit(task)}
@@ -1528,6 +1527,7 @@ export function TasksList({
                                   onSave={async ({
                                     attachments,
                                     attachmentIdsToDelete,
+                                    dateDetails,
                                   }) => {
                                     const nextTitle = editingState.title.trim();
 
@@ -1543,6 +1543,7 @@ export function TasksList({
                                       type: editingState.type,
                                       category:
                                         editingState.category.trim() || null,
+                                      date_details: dateDetails,
                                     });
                                     if (!taskWasUpdated) return;
 
@@ -1742,7 +1743,7 @@ export function TasksList({
           setDescriptionHistoryTaskId(detailsTask.id);
         }}
         onCancelEdit={cancelEdit}
-        onSaveEdit={async ({ attachments, attachmentIdsToDelete }) => {
+        onSaveEdit={async ({ attachments, attachmentIdsToDelete, dateDetails }) => {
           if (!detailsTask || !editingState) return;
           const nextTitle = editingState.title.trim();
 
@@ -1754,6 +1755,7 @@ export function TasksList({
             priority: editingState.priority,
             type: editingState.type,
             category: editingState.category.trim() || null,
+            date_details: dateDetails,
           });
           if (!taskWasUpdated) return;
 
@@ -1774,8 +1776,11 @@ export function TasksList({
           });
         }}
         onToggleSubtask={onToggleSubtask}
+        onRenameSubtask={onRenameSubtask}
         onDeleteSubtask={(subtask) => setConfirmDeleteSubtask(subtask)}
         onReorderSubtasks={onReorderSubtasks}
+        onAddTaskComment={onAddTaskComment}
+        onDeleteTaskComment={onDeleteTaskComment}
         onSubmitSubtask={(event) => {
           if (detailsTask) void submitSubtask(event, detailsTask.id);
         }}
@@ -1788,6 +1793,8 @@ export function TasksList({
         }}
         onOpenAttachment={(index) => {
           if (!detailsTask) return;
+          const attachment = sortAttachments(detailsTask.attachments)[index];
+          if (attachment) void fetch(`/api/tasks/${detailsTask.id}/attachments/${attachment.id}`, { method: "POST" });
           setAttachmentViewer({
             task: {
               ...detailsTask,
@@ -1889,8 +1896,11 @@ function TaskDetailsDialog({
   onEditDirtyChange,
   onRequestDelete,
   onToggleSubtask,
+  onRenameSubtask,
   onDeleteSubtask,
   onReorderSubtasks,
+  onAddTaskComment,
+  onDeleteTaskComment,
   onSubmitSubtask,
   onSubtaskDraftChange,
   onOpenAttachment,
@@ -1909,18 +1919,25 @@ function TaskDetailsDialog({
   onSaveEdit: (changes: {
     attachments: File[];
     attachmentIdsToDelete: string[];
+    dateDetails?: Partial<Omit<DateDetails, "task_id">>;
   }) => Promise<void>;
   onEditDirtyChange?: (isDirty: boolean) => void;
   onRequestDelete: () => void;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
+  onRenameSubtask: (subtaskId: string, title: string) => Promise<void>;
   onDeleteSubtask: (subtask: { id: string; title: string }) => void;
   onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
+  onAddTaskComment: (taskId: string, content: string) => Promise<void>;
+  onDeleteTaskComment: (taskId: string, commentId: string) => Promise<void>;
   onSubmitSubtask: (event: FormEvent<HTMLFormElement>) => void;
   onSubtaskDraftChange: (value: string) => void;
   onOpenAttachment: (index: number) => void;
 }) {
   const [draggingSubtaskId, setDraggingSubtaskId] = useState<string | null>(null);
   const [dragOverSubtaskId, setDragOverSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
+  const [commentDraft, setCommentDraft] = useState("");
   const completedSubtasks =
     task?.subtasks.filter((subtask) => subtask.is_completed).length ?? 0;
   const subtaskCount = task?.subtasks.length ?? 0;
@@ -2060,6 +2077,29 @@ function TaskDetailsDialog({
                   )}
                 </section>
 
+                {task.type === "date" && task.date_details ? (
+                  <section className="rounded-2xl border border-pink-500/20 bg-pink-500/[0.04] p-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-pink-700 dark:text-pink-200">Dados do Date</h3>
+                    <div className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+                      {task.date_details.work ? <p><span className="text-slate-500 dark:text-white/45">Trabalho: </span>{task.date_details.work}</p> : null}
+                      {[["Idade", task.date_details.age], ["Signo", task.date_details.sign], ["Endereço", task.date_details.address], ["Altura", task.date_details.height], ["Tem filho", task.date_details.has_children === null ? null : task.date_details.has_children ? "Sim" : "Não"], ["Local", task.date_details.location], ["Data", task.date_details.date_at], ["Personalidade", task.date_details.personality_rating], ["Rosto", task.date_details.face_rating], ["Corpo", task.date_details.body_rating], ["Sexo", task.date_details.sex_rating]].filter(([, value]) => value !== null && value !== "").map(([label, value]) => <p key={String(label)}><span className="text-slate-500 dark:text-white/45">{label}: </span>{String(value)}</p>)}
+                    </div>
+                  </section>
+                ) : null}
+
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">Comentários</h3>
+                  <div className="mt-2 space-y-2">
+                    {task.comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-2 rounded-xl bg-slate-950/[0.035] p-2 text-sm dark:bg-white/[0.045]">
+                        <p className="min-w-0 flex-1 whitespace-pre-wrap">{comment.content}</p>
+                        <Button type="button" size="icon-sm" variant="ghost" className="size-7 text-rose-500" onClick={() => void onDeleteTaskComment(task.id, comment.id)} aria-label="Excluir comentário"><Trash2 className="size-3.5" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex gap-2"><Input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Adicionar observação" maxLength={2000} /><Button type="button" disabled={!commentDraft.trim()} onClick={() => void onAddTaskComment(task.id, commentDraft).then(() => setCommentDraft(""))}>Comentar</Button></div>
+                </section>
+
                 <section>
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -2093,7 +2133,7 @@ function TaskDetailsDialog({
                                 {attachment.file_name}
                               </span>
                               <span className="mt-0.5 block text-xs text-slate-500 dark:text-white/45">
-                                {getAttachmentKind(attachment) === "pdf" ? "PDF" : attachment.mime_type || "Arquivo"}
+                                {getAttachmentKind(attachment) === "pdf" ? "PDF" : attachment.mime_type || "Arquivo"} · {formatFileSize(attachment.file_size)} · .{attachment.file_name.split(".").pop()?.toUpperCase() || "ARQ"} · adicionado {formatCompactDate(attachment.created_at)}{attachment.last_viewed_at ? ` · visto ${formatCompactDate(attachment.last_viewed_at)}` : " · não visualizado"}
                               </span>
                             </span>
                           </button>
@@ -2199,7 +2239,9 @@ function TaskDetailsDialog({
                               }
                               className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
                             />
-                            <span
+                            {editingSubtaskId === subtask.id ? (
+                              <Input className="h-8 min-w-0 flex-1" value={editingSubtaskTitle} autoFocus onChange={(event) => setEditingSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && editingSubtaskTitle.trim()) { void onRenameSubtask(subtask.id, editingSubtaskTitle.trim()).then(() => setEditingSubtaskId(null)); } if (event.key === "Escape") setEditingSubtaskId(null); }} />
+                            ) : <span
                               title={
                                 subtask.is_completed && subtask.completed_at
                                   ? `Finalizada em ${formatDateTime(subtask.completed_at)}`
@@ -2213,8 +2255,11 @@ function TaskDetailsDialog({
                               ].join(" ")}
                             >
                               {subtask.title}
-                            </span>
+                            </span>}
                           </label>
+                          <Button type="button" size="icon-sm" variant="ghost" className="size-9" onClick={() => { setEditingSubtaskId(subtask.id); setEditingSubtaskTitle(subtask.title); }} aria-label={`Editar ${subtask.title}`}>
+                            <Pencil className="size-3.5" />
+                          </Button>
                           <Button
                             type="button"
                             size="icon-sm"
@@ -2431,6 +2476,13 @@ function TaskDescriptionHistoryDialog({
 
 function getAttachmentUrl(taskId: string, attachmentId: string) {
   return `/api/tasks/${taskId}/attachments/${attachmentId}`;
+}
+
+function formatFileSize(size: number | null) {
+  if (!size) return "tamanho indisponível";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function getAttachmentKind(attachment: TaskAttachment) {
@@ -2651,6 +2703,7 @@ function TaskEditForm({
   onSave: (changes: {
     attachments: File[];
     attachmentIdsToDelete: string[];
+    dateDetails?: Partial<Omit<DateDetails, "task_id">>;
   }) => Promise<void>;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -2663,6 +2716,7 @@ function TaskEditForm({
   const [attachmentPendingDeletion, setAttachmentPendingDeletion] =
     useState<TaskAttachment | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [dateDetails, setDateDetails] = useState<Partial<Omit<DateDetails, "task_id">>>(task.date_details ?? {});
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const hasDetailChanges =
@@ -2757,13 +2811,61 @@ function TaskEditForm({
         maxLength={120}
       />
 
+      {editingState.type === "date" ? (
+        <section className="rounded-2xl border border-pink-500/20 bg-pink-500/[0.04] p-3">
+          <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-200">Dados estruturados do Date</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-white/45">Preencha estes dados primeiro; use a descrição para observações adicionais.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Input
+              type="text"
+              placeholder="Trabalho"
+              value={String(dateDetails.work ?? "")}
+              onChange={(event) => setDateDetails((current) => ({ ...current, work: event.target.value || null }))}
+            />
+            {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["location", "Local", "text"], ["date_at", "Data do date", "date"]].map(([key, label, type]) => (
+              <Input key={key} type={type} placeholder={label} value={String(dateDetails[key as keyof typeof dateDetails] ?? "")} onChange={(event) => setDateDetails((current) => ({ ...current, [key]: type === "number" ? (event.target.value ? Number(event.target.value) : null) : event.target.value || null }))} />
+            ))}
+            <Select
+              value={dateDetails.has_children == null ? "not-informed" : String(dateDetails.has_children)}
+              onValueChange={(value) => setDateDetails((current) => ({ ...current, has_children: value === "not-informed" ? null : value === "true" }))}
+            >
+              <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                <span className="flex h-full items-center">{dateDetails.has_children == null ? "Tem filho?" : dateDetails.has_children ? "Tem filho: Sim" : "Tem filho: Não"}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="not-informed">Tem filho? (não informado)</SelectItem>
+                <SelectItem value="true">Sim</SelectItem>
+                <SelectItem value="false">Não</SelectItem>
+              </SelectContent>
+            </Select>
+            {[["personality_rating", "Nota personalidade"], ["face_rating", "Nota rosto"], ["body_rating", "Nota corpo"], ["sex_rating", "Nota sexo"]].map(([key, label]) => (
+              <Select
+                key={key}
+                value={dateDetails[key as keyof typeof dateDetails] == null ? "unrated" : String(dateDetails[key as keyof typeof dateDetails])}
+                onValueChange={(value) => setDateDetails((current) => ({ ...current, [key]: value === "unrated" ? null : Number(value) }))}
+              >
+                <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                  <span className="flex h-full items-center">{dateDetails[key as keyof typeof dateDetails] == null ? `${label} (1–10)` : `${label}: ${dateDetails[key as keyof typeof dateDetails]}`}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unrated">{label} (não informada)</SelectItem>
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
+                    <SelectItem key={rating} value={String(rating)}>{rating}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <Textarea
         ref={descriptionRef}
         className="min-h-20 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
         value={editingState.description}
         disabled={isSaving}
         onChange={handleDescriptionChange}
-        placeholder="Descrição opcional"
+        placeholder={editingState.type === "date" ? "Observações adicionais (opcional)" : "Descrição opcional"}
         rows={3}
       />
       <div className="rounded-2xl border border-slate-900/10 p-3 dark:border-white/10">
@@ -2775,8 +2877,14 @@ function TaskEditForm({
             {sortAttachments(task.attachments)
               .filter((item) => !attachmentIdsToDelete.includes(item.id))
               .map((item) => (
-                <div key={item.id} className="relative">
+                <div key={item.id} className="relative w-28 min-w-0">
                   <AttachmentPreview attachment={item} taskId={task.id} />
+                  <span
+                    className="mt-1 block w-full truncate text-center text-[11px] text-slate-600 dark:text-white/65"
+                    title={item.file_name}
+                  >
+                    {item.file_name}
+                  </span>
                   <Button
                     type="button"
                     size="icon-sm"
@@ -2812,9 +2920,14 @@ function TaskEditForm({
             {pendingAttachments.map((attachment, index) => (
               <span
                 key={`${attachment.name}-${attachment.lastModified}-${index}`}
-                className="flex items-center rounded-full bg-teal-500/10 pl-2.5 text-xs text-teal-700 dark:text-teal-200"
+                className="flex min-w-0 max-w-52 items-center rounded-full bg-teal-500/10 pl-2.5 text-xs text-teal-700 dark:text-teal-200"
               >
-                {attachment.name || "Arquivo"}
+                <span
+                  className="min-w-0 truncate"
+                  title={attachment.name || "Arquivo"}
+                >
+                  {attachment.name || "Arquivo"}
+                </span>
                 <Button
                   type="button"
                   size="icon-sm"
@@ -2881,10 +2994,6 @@ function TaskEditForm({
               return {
                 ...current,
                 type,
-                description:
-                  type === "date"
-                    ? DATE_DESCRIPTION_TEMPLATE
-                    : current.description,
               };
             })
           }
@@ -2943,7 +3052,7 @@ function TaskEditForm({
           size="sm"
           className="h-11 flex-1 gap-1.5 touch-manipulation rounded-full px-4 sm:h-7 sm:flex-none sm:px-2.5"
           onClick={() =>
-            onSave({ attachments: pendingAttachments, attachmentIdsToDelete })
+            onSave({ attachments: pendingAttachments, attachmentIdsToDelete, dateDetails: editingState.type === "date" ? dateDetails : undefined })
           }
           disabled={!hasChanges || isSaving}
         >
