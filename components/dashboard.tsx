@@ -790,7 +790,7 @@ export function Dashboard({
           open={taskCreateOpen}
           onOpenChange={handleTaskCreateDialogChange}
         >
-          <DialogContent className="grid h-svh max-h-svh w-screen max-w-none grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
+          <DialogContent className="grid h-svh max-h-svh w-screen max-w-none grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:px-4 sm:pb-4 sm:pt-16">
             <DialogTitle className="sr-only">Nova tarefa</DialogTitle>
             <DialogDescription className="sr-only">
               Crie uma tarefa com descrição, anexos e subtarefas opcionais.
