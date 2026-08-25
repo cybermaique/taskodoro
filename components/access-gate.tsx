@@ -18,6 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useSensoryEffects } from "@/components/sensory-effects";
+import {
+  applyProfileAccent,
+  rememberProfileAccent,
+  restoreProfileAccent,
+} from "@/lib/profile-accent";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 function AccessTransition({ message }: { message: string }) {
@@ -90,6 +95,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    restoreProfileAccent();
+  }, []);
+
+  useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     void supabase.auth
       .getSession()
@@ -110,11 +119,13 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
     void createSupabaseBrowserClient()
       .from("profiles")
-      .select("nickname")
+      .select("nickname,accent_color")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (isCurrent) {
+          const accent = applyProfileAccent(data?.accent_color);
+          rememberProfileAccent(accent, session.user.id);
           setProfileNickname(
             data?.nickname?.trim() || getFallbackNickname(session.user.email),
           );

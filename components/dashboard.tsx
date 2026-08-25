@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/format";
+import { applyProfileAccent, rememberProfileAccent } from "@/lib/profile-accent";
 import type { Note } from "@/types/note";
 import type { Profile, ProfileDisplayMode } from "@/types/profile";
 import type { DateDetails, Task, TaskPriority, TaskType } from "@/types/task";
@@ -103,6 +104,8 @@ export function Dashboard({
       : "tasks";
   });
   const isCompact = displayMode === "compact";
+  const profileAccent = profile?.accent_color;
+  const profileId = profile?.id;
   const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
   const greetedProfileIdRef = useRef<string | null>(null);
 
@@ -117,13 +120,11 @@ export function Dashboard({
   }, [profile]);
 
   useEffect(() => {
-    const accent = profile?.accent_color ?? "teal";
-    document.documentElement.dataset.profileAccent = accent;
+    if (!profileAccent || !profileId) return;
 
-    return () => {
-      document.documentElement.dataset.profileAccent = "teal";
-    };
-  }, [profile?.accent_color]);
+    const accent = applyProfileAccent(profileAccent);
+    rememberProfileAccent(accent, profileId);
+  }, [profileAccent, profileId]);
 
   useEffect(() => {
     if (!profile || greetedProfileIdRef.current === profile.id) return;

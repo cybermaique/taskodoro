@@ -893,26 +893,26 @@ body,
 @keyframes access-icon-float {
   0%,
   100% {
-    box-shadow: 0 8px 22px rgb(20 184 166 / 20%);
+    box-shadow: 0 8px 22px var(--profile-accent-soft);
     transform: translateY(0) rotate(-2deg);
   }
   50% {
-    box-shadow: 0 14px 32px rgb(99 102 241 / 28%);
+    box-shadow: 0 14px 32px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: translateY(-5px) rotate(3deg);
   }
 }
 
 @keyframes access-logo-orbit {
   0% {
-    box-shadow: 0 0 0 0 rgb(45 212 191 / 36%), 0 0 24px rgb(99 102 241 / 28%);
+    box-shadow: 0 0 0 0 var(--profile-accent-soft), 0 0 24px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: rotate(0deg) scale(0.92);
   }
   50% {
-    box-shadow: 0 0 0 12px rgb(45 212 191 / 0%), 0 0 44px rgb(99 102 241 / 46%);
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--profile-accent) 0%, transparent), 0 0 44px color-mix(in srgb, var(--profile-accent) 46%, transparent);
     transform: rotate(180deg) scale(1.08);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(45 212 191 / 0%), 0 0 24px rgb(99 102 241 / 28%);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--profile-accent) 0%, transparent), 0 0 24px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: rotate(360deg) scale(0.92);
   }
 }
@@ -2631,9 +2631,9 @@ body,
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, rgb(45 212 191 / 16%), transparent 34%),
-    radial-gradient(circle at 82% 78%, rgb(99 102 241 / 18%), transparent 38%),
-    linear-gradient(145deg, var(--background), color-mix(in oklab, var(--background) 90%, #14b8a6));
+    radial-gradient(circle at 18% 20%, var(--profile-accent-soft), transparent 34%),
+    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--profile-accent) 16%, transparent), transparent 38%),
+    linear-gradient(145deg, var(--background), color-mix(in oklab, var(--background) 90%, var(--profile-accent)));
 }
 
 .access-loading-screen {
@@ -2666,7 +2666,7 @@ body,
   top: 12%;
   width: 11rem;
   height: 11rem;
-  background: radial-gradient(circle at 35% 30%, #5eead4, #0f766e 70%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 65%, white), var(--profile-accent-strong) 70%);
 }
 
 .access-orb-two {
@@ -2674,7 +2674,7 @@ body,
   bottom: 9%;
   width: 14rem;
   height: 14rem;
-  background: radial-gradient(circle at 35% 30%, #c4b5fd, #4f46e5 72%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 30%, white), color-mix(in srgb, var(--profile-accent) 72%, #312e81) 72%);
   animation-delay: -2.7s;
 }
 
@@ -2683,7 +2683,7 @@ body,
   top: 10%;
   width: 5rem;
   height: 5rem;
-  background: radial-gradient(circle at 35% 30%, #f9a8d4, #be185d 72%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 24%, white), color-mix(in srgb, var(--profile-accent) 72%, #9d174d) 72%);
   animation-delay: -5.2s;
 }
 
@@ -2708,10 +2708,10 @@ body,
   width: 3.5rem;
   height: 3.5rem;
   place-items: center;
-  border: 1px solid rgb(45 212 191 / 35%);
+  border: 1px solid color-mix(in srgb, var(--profile-accent) 52%, transparent);
   border-radius: 1.15rem;
-  background: linear-gradient(135deg, rgb(20 184 166 / 18%), rgb(99 102 241 / 20%));
-  color: #14b8a6;
+  background: linear-gradient(135deg, var(--profile-accent-soft), color-mix(in srgb, var(--profile-accent) 12%, #6366f1));
+  color: var(--profile-accent);
 }
 
 .access-login-icon {
@@ -2737,9 +2737,9 @@ body,
   top: 50%;
   width: 12rem;
   height: 12rem;
-  border: 2px solid rgb(45 212 191 / 55%);
+  border: 2px solid color-mix(in srgb, var(--profile-accent) 55%, transparent);
   border-radius: 9999px;
-  background: radial-gradient(circle, rgb(45 212 191 / 20%), transparent 66%);
+  background: radial-gradient(circle, var(--profile-accent-soft), transparent 66%);
   animation: access-transition-ripple 950ms ease-out both;
 }
 
