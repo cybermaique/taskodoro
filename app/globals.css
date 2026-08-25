@@ -2920,18 +2920,7 @@ body,
 }
 
 .compact-joy-field__halo {
-  position: absolute;
-  inset: -16% -2%;
-  border-radius: 9999px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, #2dd4bf 12%, transparent),
-    color-mix(in srgb, #f472b6 20%, transparent) 48%,
-    color-mix(in srgb, #facc15 14%, transparent)
-  );
-  filter: blur(22px);
-  opacity: 0.75;
-  animation: compact-joy-halo 4.8s ease-in-out infinite;
+  display: none;
 }
 
 .compact-joy-field__ribbon {
