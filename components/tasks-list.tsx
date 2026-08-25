@@ -82,6 +82,8 @@ import {
   getDefaultTaskType,
   getTaskCategoryLabel,
   getTaskTypeOptions,
+  DATE_MEETING_SOURCE_OPTIONS,
+  getDateMeetingSourceLabel,
   TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
 } from "@/types/task";
@@ -2162,6 +2164,10 @@ function TaskDetailsDialog({
                           </p>
                         ) : null}
                         {[
+                          [
+                            "Conheceu por",
+                            getDateMeetingSourceLabel(task.date_details.met_via),
+                          ],
                           ["Idade", task.date_details.age],
                           ["Signo", task.date_details.sign],
                           ["Endereço", task.date_details.address],
@@ -2174,7 +2180,6 @@ function TaskDetailsDialog({
                                 ? "Sim"
                                 : "Não",
                           ],
-                          ["Local", task.date_details.location],
                           ["Data", task.date_details.date_at],
                           [
                             "Personalidade",
@@ -3166,12 +3171,36 @@ function TaskEditForm({
                 }))
               }
             />
+            <Select
+              value={dateDetails.met_via ?? "not-informed"}
+              onValueChange={(value) =>
+                setDateDetails((current) => ({
+                  ...current,
+                  met_via: value === "not-informed" ? null : value,
+                }))
+              }
+            >
+              <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                <span className="flex h-full items-center">
+                  {dateDetails.met_via
+                    ? getDateMeetingSourceLabel(dateDetails.met_via)
+                    : "Conheceu por..."}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="not-informed">Conheceu por...</SelectItem>
+                {DATE_MEETING_SOURCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {[
               ["age", "Idade", "number"],
               ["sign", "Signo", "text"],
               ["address", "Endereço", "text"],
               ["height", "Altura", "text"],
-              ["location", "Local", "text"],
             ].map(([key, label, type]) => (
               <Input
                 key={key}

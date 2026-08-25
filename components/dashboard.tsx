@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { NotesPanel } from "@/components/notes-panel";
+import { CompactJoyField } from "@/components/compact-joy-field";
 import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
@@ -25,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/format";
+import { applyProfileAccent, rememberProfileAccent } from "@/lib/profile-accent";
 import type { Note } from "@/types/note";
 import type { Profile, ProfileDisplayMode } from "@/types/profile";
 import type { DateDetails, Task, TaskPriority, TaskType } from "@/types/task";
@@ -102,6 +104,8 @@ export function Dashboard({
       : "tasks";
   });
   const isCompact = displayMode === "compact";
+  const profileAccent = profile?.accent_color;
+  const profileId = profile?.id;
   const hasUnsavedTaskChanges = hasUnsavedTaskForm || hasUnsavedTaskEdit;
   const greetedProfileIdRef = useRef<string | null>(null);
 
@@ -116,13 +120,11 @@ export function Dashboard({
   }, [profile]);
 
   useEffect(() => {
-    const accent = profile?.accent_color ?? "teal";
-    document.documentElement.dataset.profileAccent = accent;
+    if (!profileAccent || !profileId) return;
 
-    return () => {
-      document.documentElement.dataset.profileAccent = "teal";
-    };
-  }, [profile?.accent_color]);
+    const accent = applyProfileAccent(profileAccent);
+    rememberProfileAccent(accent, profileId);
+  }, [profileAccent, profileId]);
 
   useEffect(() => {
     if (!profile || greetedProfileIdRef.current === profile.id) return;
@@ -637,11 +639,20 @@ export function Dashboard({
         <span className="dashboard-boot-orb dashboard-boot-orb-secondary" />
         <span className="dashboard-boot-scan" />
       </div>
-      <div className="dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col gap-4 sm:gap-6">
+      <div
+        className={[
+          "dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col",
+          isCompact
+            ? "dashboard-safe-insets-compact gap-0"
+            : "gap-4 sm:gap-6",
+        ].join(" ")}
+      >
         <header
           className={[
-            "dashboard-reveal-header grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
-            isCompact ? "gap-0 sm:gap-4" : "",
+            "dashboard-reveal-header grid min-w-0",
+            isCompact
+              ? "grid-cols-[minmax(0,1fr)_auto] items-center gap-0"
+              : "gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
           ].join(" ")}
         >
           <div
@@ -666,9 +677,14 @@ export function Dashboard({
             </div>
           </div>
 
+          {isCompact ? <CompactJoyField /> : null}
+
           <div
             className={[
-              "dashboard-reveal-account flex w-full flex-wrap items-center justify-between gap-2 justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
+              "dashboard-reveal-account flex flex-wrap items-center gap-2",
+              isCompact
+                ? "w-auto justify-self-end"
+                : "w-full justify-between justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
             ].join(" ")}
           >
             {!isCompact ? (
@@ -724,7 +740,10 @@ export function Dashboard({
         <Tabs
           value={selectedTab}
           onValueChange={handleTabChange}
-          className="dashboard-reveal-tabs min-w-0 gap-3 sm:gap-4"
+          className={[
+            "dashboard-reveal-tabs min-w-0",
+            isCompact ? "gap-0" : "gap-3 sm:gap-4",
+          ].join(" ")}
         >
           <TabsList
             className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-2 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
@@ -790,17 +809,19 @@ export function Dashboard({
           open={taskCreateOpen}
           onOpenChange={handleTaskCreateDialogChange}
         >
-          <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
+          <DialogContent className="grid h-svh max-h-svh w-screen max-w-none grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:px-4 sm:pb-4 sm:pt-16">
             <DialogTitle className="sr-only">Nova tarefa</DialogTitle>
             <DialogDescription className="sr-only">
               Crie uma tarefa com descrição, anexos e subtarefas opcionais.
             </DialogDescription>
-            <TaskForm
-              isSubmitting={creatingTask}
-              isCompact={false}
-              onDirtyChange={setHasUnsavedTaskForm}
-              onCreate={createTask}
-            />
+            <div className="min-h-0 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+              <TaskForm
+                isSubmitting={creatingTask}
+                isCompact={false}
+                onDirtyChange={setHasUnsavedTaskForm}
+                onCreate={createTask}
+              />
+            </div>
           </DialogContent>
         </Dialog>
 

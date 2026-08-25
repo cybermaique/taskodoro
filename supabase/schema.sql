@@ -61,6 +61,7 @@ create table if not exists public.task_date_details (
   address text,
   height text,
   work text,
+  met_via text,
   has_children boolean,
   location text,
   date_at date,
