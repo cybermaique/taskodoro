@@ -14,6 +14,7 @@ import { ProfileSettings } from "@/components/profile-settings";
 import { TaskForm } from "@/components/task-form";
 import { TasksList } from "@/components/tasks-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -23,16 +24,17 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
+import { formatDateTime } from "@/lib/format";
 import type { Note } from "@/types/note";
 import type { Profile, ProfileDisplayMode } from "@/types/profile";
-import type { Task, TaskPriority, TaskType } from "@/types/task";
+import type { DateDetails, Task, TaskPriority, TaskType } from "@/types/task";
 
 const APP_TITLE = "Taskboard";
 function sortByMostRecent(tasks: Task[]) {
   return [...tasks].sort(
     (left, right) =>
-      new Date(right.created_at).getTime() -
-      new Date(left.created_at).getTime(),
+      left.position - right.position ||
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
   );
 }
 function upsertTask(tasks: Task[], nextTask: Task) {
@@ -83,6 +85,10 @@ export function Dashboard({
   const [hasUnsavedTaskEdit, setHasUnsavedTaskEdit] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastDeletedTask, setLastDeletedTask] = useState<Task | null>(null);
+  const [trashedTasks, setTrashedTasks] = useState<Task[]>([]);
+  const [trashedNotes, setTrashedNotes] = useState<Note[]>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
   const toast = useToast();
   const [displayMode, setDisplayMode] = useState<ProfileDisplayMode>("full");
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(() => {
@@ -177,6 +183,7 @@ export function Dashboard({
     category?: string | null;
     attachments?: File[];
     subtasks?: string[];
+    date_details?: Partial<Omit<DateDetails, "task_id">>;
   }) => {
     setCreatingTask(true);
     setErrorMessage(null);
@@ -288,8 +295,9 @@ export function Dashboard({
         throw new Error(data.error ?? "Não foi possível excluir a tarefa.");
       }
 
+      setLastDeletedTask(tasks.find((task) => task.id === taskId) ?? null);
       setTasks((current) => current.filter((task) => task.id !== taskId));
-      toast.success("Tarefa excluída!");
+      toast.success("Tarefa movida para a lixeira!");
       return true;
     } catch (error) {
       const msg =
@@ -469,6 +477,49 @@ export function Dashboard({
     setSelectedTab(nextTab);
   };
 
+  const restoreDeletedTask = async () => {
+    if (!lastDeletedTask) return;
+    const response = await fetch(`/api/tasks/${lastDeletedTask.id}/restore`, { method: "POST" });
+    const data = (await response.json()) as { task?: Task; error?: string };
+    if (!response.ok || !data.task) { toast.error(data.error ?? "Não foi possível restaurar a tarefa."); return; }
+    setTasks((current) => upsertTask(current, data.task as Task));
+    setLastDeletedTask(null);
+    toast.success("Tarefa restaurada!");
+  };
+
+  const openTrash = async () => {
+    const response = await fetch("/api/trash");
+    const data = (await response.json()) as { tasks?: Task[]; notes?: Note[]; error?: string };
+    if (!response.ok || !data.tasks || !data.notes) { toast.error(data.error ?? "Não foi possível abrir a lixeira."); return; }
+    setTrashedTasks(data.tasks); setTrashedNotes(data.notes); setTrashOpen(true);
+  };
+
+  const restoreNoteFromTrash = async (noteId: string) => {
+    const response = await fetch(`/api/notes/${noteId}/restore`, { method: "POST" });
+    const data = (await response.json()) as { note?: Note; error?: string };
+    if (!response.ok || !data.note) { toast.error(data.error ?? "Não foi possível restaurar a anotação."); return; }
+    setTrashedNotes((current) => current.filter((note) => note.id !== noteId));
+    toast.success("Anotação restaurada!");
+    window.location.reload();
+  };
+
+  const restoreFromTrash = async (taskId: string) => {
+    const response = await fetch(`/api/tasks/${taskId}/restore`, { method: "POST" });
+    const data = (await response.json()) as { task?: Task; error?: string };
+    if (!response.ok || !data.task) { toast.error(data.error ?? "Não foi possível restaurar a tarefa."); return; }
+    setTasks((current) => upsertTask(current, data.task as Task));
+    setTrashedTasks((current) => current.filter((task) => task.id !== taskId));
+    setLastDeletedTask((current) => current?.id === taskId ? null : current);
+    toast.success("Tarefa restaurada!");
+  };
+
+  const renameSubtask = async (subtaskId: string, title: string) => {
+    const response = await fetch(`/api/subtasks/${subtaskId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) });
+    const data = (await response.json()) as { task?: Task; error?: string };
+    if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível editar a subtarefa.");
+    setTasks((current) => upsertTask(current, data.task as Task));
+  };
+
   const restoreTaskDescription = async (taskId: string, historyId: string) => {
     setBusyTaskId(taskId);
     setErrorMessage(null);
@@ -532,6 +583,27 @@ export function Dashboard({
     } finally {
       setBusyTaskId(null);
     }
+  };
+
+  const reorderTasks = async (taskIds: string[]) => {
+    const response = await fetch("/api/tasks/reorder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task_ids: taskIds }) });
+    const data = (await response.json()) as { tasks?: Task[]; error?: string };
+    if (!response.ok || !data.tasks) throw new Error(data.error ?? "Não foi possível ordenar as tarefas.");
+    setTasks(data.tasks);
+  };
+
+  const addTaskComment = async (taskId: string, content: string) => {
+    const response = await fetch(`/api/tasks/${taskId}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
+    const data = (await response.json()) as { task?: Task; error?: string };
+    if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível adicionar o comentário.");
+    setTasks((current) => upsertTask(current, data.task as Task));
+  };
+
+  const removeTaskComment = async (taskId: string, commentId: string) => {
+    const response = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+    const data = (await response.json()) as { task?: Task; error?: string };
+    if (!response.ok || !data.task) throw new Error(data.error ?? "Não foi possível excluir o comentário.");
+    setTasks((current) => upsertTask(current, data.task as Task));
   };
 
   const handleTaskCreateDialogChange = (open: boolean) => {
@@ -623,6 +695,7 @@ export function Dashboard({
                 setDisplayMode(mode);
                 void onProfilePreferenceChange({ display_mode: mode });
               }}
+              onOpenTrash={() => void openTrash()}
             />
           </div>
         </header>
@@ -633,6 +706,21 @@ export function Dashboard({
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
+        {lastDeletedTask ? (
+          <Alert className="border-teal-500/30 bg-teal-500/10">
+            <AlertTitle>Tarefa na lixeira</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-2">{lastDeletedTask.title}<Button size="sm" variant="outline" onClick={() => void restoreDeletedTask()}>Desfazer</Button></AlertDescription>
+          </Alert>
+        ) : null}
+        <Dialog open={trashOpen} onOpenChange={setTrashOpen}>
+          <DialogContent className="max-w-lg"><DialogTitle>Lixeira</DialogTitle><DialogDescription>Restaure tarefas e anotações quando precisar.</DialogDescription>
+            <div className="max-h-80 space-y-3 overflow-y-auto">
+              {trashedTasks.length ? <section><p className="mb-1 text-xs font-semibold uppercase text-slate-500">Tarefas</p>{trashedTasks.map((task) => <div key={task.id} className="mb-2 flex items-center gap-2 rounded-xl border p-2"><span className="min-w-0 flex-1"><span className="block truncate">{task.title}</span><span className="block text-xs text-slate-500 dark:text-white/45">Excluída em {formatDateTime(task.deleted_at)}</span></span><Button size="sm" onClick={() => void restoreFromTrash(task.id)}>Restaurar</Button></div>)}</section> : null}
+              {trashedNotes.length ? <section><p className="mb-1 text-xs font-semibold uppercase text-slate-500">Anotações</p>{trashedNotes.map((note) => <div key={note.id} className="mb-2 flex items-center gap-2 rounded-xl border p-2"><span className="min-w-0 flex-1"><span className="block truncate">{note.title}</span><span className="block text-xs text-slate-500 dark:text-white/45">Excluída em {formatDateTime(note.deleted_at)}</span></span><Button size="sm" onClick={() => void restoreNoteFromTrash(note.id)}>Restaurar</Button></div>)}</section> : null}
+              {!trashedTasks.length && !trashedNotes.length ? <p className="text-sm text-slate-500">A lixeira está vazia.</p> : null}
+            </div>
+          </DialogContent>
+        </Dialog>
         <Tabs
           value={selectedTab}
           onValueChange={handleTabChange}
@@ -682,8 +770,12 @@ export function Dashboard({
                   onDeleteAttachment={deleteTaskAttachment}
                   onCreateSubtask={createSubtask}
                   onToggleSubtask={toggleSubtask}
+                  onRenameSubtask={renameSubtask}
                   onDeleteSubtask={deleteSubtask}
                   onReorderSubtasks={reorderSubtasks}
+                  onReorderTasks={reorderTasks}
+                  onAddTaskComment={addTaskComment}
+                  onDeleteTaskComment={removeTaskComment}
                 />
               </div>
             </section>

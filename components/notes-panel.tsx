@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   Braces,
-  CalendarDays,
   Clock,
   Copy,
   Hash,
@@ -25,6 +24,7 @@ import {
   Trash2,
   X,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { DateRangePicker } from "@/components/ui/date-picker";
 import type { Note } from "@/types/note";
 
 /* ── helpers ───────────────────────────────────────────── */
@@ -788,6 +789,7 @@ function NoteCard({
             </div>
           </div>
           <div className="space-y-3">{renderNoteContent()}</div>
+          {note.attachments.length ? <div className="mt-3 flex flex-wrap gap-2">{note.attachments.map((attachment) => <a key={attachment.id} href={`/api/notes/${note.id}/attachments/${attachment.id}`} target="_blank" className="max-w-48 truncate rounded-full border border-violet-500/25 px-2 py-1 text-xs text-violet-700 dark:text-violet-200" title={attachment.file_name}>{attachment.file_name}</a>)}</div> : null}
         </div>
       )}
 
@@ -1001,6 +1003,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createCloseConfirmationOpen, setCreateCloseConfirmationOpen] =
@@ -1103,7 +1106,15 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       const data = (await res.json()) as { note?: Note; error?: string };
       if (!res.ok || !data.note)
         throw new Error(data.error ?? "Erro ao salvar.");
-      setNotes((prev) => [data.note as Note, ...prev]);
+      let note = { ...(data.note as Note), attachments: (data.note as Note).attachments ?? [] };
+      for (const attachment of attachments) {
+        const formData = new FormData(); formData.append("file", attachment);
+        const upload = await fetch(`/api/notes/${note.id}/attachments`, { method: "POST", body: formData });
+        const uploadData = (await upload.json()) as { note?: Note; error?: string };
+        if (!upload.ok || !uploadData.note) throw new Error(uploadData.error ?? "A anotação foi criada, mas o anexo falhou.");
+        note = uploadData.note;
+      }
+      setNotes((prev) => [note, ...prev]);
       setNewlyCreatedNoteId(data.note.id);
       if (newNoteTimeoutRef.current !== null) {
         window.clearTimeout(newNoteTimeoutRef.current);
@@ -1114,6 +1125,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       }, 2200);
       setTitleDraft("");
       setDraft("");
+      setAttachments([]);
       setCreateDialogOpen(false);
       toast.success("Anotação criada!");
     } catch (e) {
@@ -1302,6 +1314,10 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
               className="min-h-72 min-w-0 max-h-[calc(100svh-12rem)] flex-1 resize-y overflow-y-auto rounded-xl border-slate-200 bg-white/50 text-base leading-relaxed focus-visible:ring-violet-400 sm:min-h-0 sm:text-sm dark:border-white/10 dark:bg-white/10 disabled:opacity-60"
               rows={12}
             />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+              <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 hover:bg-slate-900/5 dark:hover:bg-white/10"><Paperclip className="size-3" /> Anexar arquivos<input type="file" multiple className="sr-only" onChange={(event) => setAttachments((current) => [...current, ...Array.from(event.target.files ?? [])])} /></label>
+              {attachments.map((file, index) => <span key={`${file.name}-${index}`} className="max-w-44 truncate" title={file.name}>{file.name}</span>)}
+            </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 size="sm"
@@ -1356,8 +1372,30 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         onConfirm={() => setCreateDialogOpen(false)}
       />
 
+      <section className="dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold">Anotações</h2>
+            <p className="text-sm text-slate-500 dark:text-white/45">
+              {notes.length} {notes.length === 1 ? "anotação" : "anotações"} no seu espaço
+            </p>
+          </div>
+          <Button
+            type="button"
+            className="h-10 shrink-0 gap-1.5 rounded-full bg-violet-600 px-3 text-white hover:bg-violet-700 sm:px-4"
+            onClick={() => {
+              setError(null);
+              setCreateDialogOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nova anotação</span>
+            <span className="sm:hidden">Nova</span>
+          </Button>
+        </div>
+
       {pinnedNotes.length > 0 && (
-        <section className="app-pinned-live app-panel-enter dashboard-reveal-panel rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">
+        <section className="app-pinned-live app-panel-enter dashboard-reveal-panel mt-4 rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">
           <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600/80 dark:text-violet-200/60">
             <Pin className="size-3.5 fill-current" />
             Fixadas
@@ -1387,15 +1425,15 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* search + tag filters */}
       {notes.length > 0 && (
-        <div className="app-stagger-list dashboard-reveal-panel space-y-3">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <div className="app-stagger-list dashboard-reveal-panel mt-4 space-y-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,17.5%)_minmax(0,17.5%)]">
+            <label className="app-live-search relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar anotações…"
-                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 pr-12 text-base backdrop-blur sm:h-9 sm:pr-10 sm:text-sm dark:border-white/10 dark:bg-white/10"
+                className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 pr-12 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
               />
               {search && (
                 <button
@@ -1408,33 +1446,16 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
                   <X className="size-4" />
                 </button>
               )}
-            </div>
-            <label className="relative block">
-              <span className="sr-only">Criada a partir de</span>
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                type="date"
-                value={createdFrom}
-                max={createdTo || undefined}
-                onChange={(event) => setCreatedFrom(event.target.value)}
-                aria-label="Criada a partir de"
-                title="Criada a partir de"
-                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 text-sm backdrop-blur sm:h-9 dark:border-white/10 dark:bg-white/10"
-              />
             </label>
-            <label className="relative block">
-              <span className="sr-only">Criada até</span>
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                type="date"
-                value={createdTo}
-                min={createdFrom || undefined}
-                onChange={(event) => setCreatedTo(event.target.value)}
-                aria-label="Criada até"
-                title="Criada até"
-                className="h-11 rounded-full border-slate-200 bg-white/70 pl-9 text-sm backdrop-blur sm:h-9 dark:border-white/10 dark:bg-white/10"
-              />
-            </label>
+            <DateRangePicker
+              from={createdFrom || null}
+              to={createdTo || null}
+              onChange={(from, to) => {
+                setCreatedFrom(from);
+                setCreatedTo(to);
+              }}
+              placeholder="Período de criação"
+            />
           </div>
 
           {createdFrom || createdTo ? (
@@ -1475,27 +1496,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Anotações</h2>
-          <p className="text-sm text-slate-500 dark:text-white/45">
-            {notes.length} {notes.length === 1 ? "anotação" : "anotações"} no
-            seu espaço
-          </p>
-        </div>
-        <Button
-          type="button"
-          className="h-10 shrink-0 gap-1.5 rounded-full bg-violet-600 px-3 text-white hover:bg-violet-700 sm:px-4"
-          onClick={() => {
-            setError(null);
-            setCreateDialogOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          <span className="hidden sm:inline">Nova anotação</span>
-          <span className="sm:hidden">Nova</span>
-        </Button>
-      </div>
+      </section>
 
       {/* notes list */}
       {filtered.length === 0 ? (

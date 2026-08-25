@@ -11,6 +11,7 @@ import {
   LogOut,
   Palette,
   Settings2,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -90,6 +91,7 @@ interface ProfileSettingsProps {
   onProfileChange: (profile: Profile) => void;
   displayMode: ProfileDisplayMode;
   onDisplayModeChange: (mode: ProfileDisplayMode) => void;
+  onOpenTrash: () => void;
 }
 
 export function ProfileSettings({
@@ -98,6 +100,7 @@ export function ProfileSettings({
   onProfileChange,
   displayMode,
   onDisplayModeChange,
+  onOpenTrash,
 }: ProfileSettingsProps) {
   const fallbackNickname = getFallbackNickname(userEmail);
   const [open, setOpen] = useState(false);
@@ -335,7 +338,7 @@ export function ProfileSettings({
           ref={profileTriggerRef}
           type="button"
           variant="outline"
-          className="profile-account-trigger h-14 max-w-[17rem] gap-3 rounded-full px-2.5 transition-all duration-300 sm:h-12 sm:px-3"
+          className="profile-account-trigger h-14 max-w-[17rem] gap-3 rounded-full px-2.5 transition-all duration-300 sm:h-14 sm:px-3"
           onClick={() => {
             if (profileMenuOpen) {
               setProfileMenuOpen(false);
@@ -430,6 +433,15 @@ export function ProfileSettings({
                 Personalizar seu espaço
               </span>
             </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="app-menu-action flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
+            onClick={() => { setProfileMenuOpen(false); onOpenTrash(); }}
+          >
+            <Trash2 className="size-4 text-slate-500" />
+            <span><span className="block text-sm font-semibold">Lixeira</span><span className="block text-xs text-slate-500 dark:text-white/45">Restaurar tarefas e anotações</span></span>
           </button>
           <div className="my-1 border-t border-slate-900/10 dark:border-white/10" />
           <button
@@ -543,7 +555,7 @@ export function ProfileSettings({
                   aria-pressed={displayMode === mode}
                 >
                   <span className="block text-xs font-semibold">{label}</span>
-                  <span className={`mt-0.5 block text-[0.68rem] ${displayMode === mode ? "text-white/70 dark:text-zinc-950/65" : "text-slate-400 dark:text-white/40"}`}>
+                  <span className={`mt-0.5 block text-[0.68rem] ${displayMode === mode ? "text-white/70 dark:text-white/70" : "text-slate-400 dark:text-white/40"}`}>
                     {description}
                   </span>
                 </button>

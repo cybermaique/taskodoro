@@ -33,7 +33,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       body.type === "feature" ||
       body.type === "bug" ||
       body.type === "improvement" ||
-      body.type === "task" ||
       body.type === "date" ||
       body.type === "study" ||
       body.type === "travel" ||
@@ -55,6 +54,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         body.category === null || typeof body.category === "string"
           ? body.category
           : undefined,
+      date_details: body.date_details && typeof body.date_details === "object" ? body.date_details : undefined,
     });
 
     return NextResponse.json({ task });
