@@ -14,8 +14,10 @@ export function CompactJoyField() {
   return (
     <div className="compact-joy-field" aria-hidden="true">
       <span className="compact-joy-field__halo" />
+      <span className="compact-joy-field__ribbon compact-joy-field__ribbon--upper" />
       <span className="compact-joy-field__ribbon" />
       <span className="compact-joy-field__ribbon compact-joy-field__ribbon--second" />
+      <span className="compact-joy-field__ribbon compact-joy-field__ribbon--lower" />
       {JOY_PARTICLES.map((particle, index) => (
         <i
           key={`${particle.left}-${particle.top}`}

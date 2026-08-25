@@ -646,8 +646,10 @@ export function Dashboard({
       >
         <header
           className={[
-            "dashboard-reveal-header grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
-            isCompact ? "gap-0 sm:gap-4" : "",
+            "dashboard-reveal-header grid min-w-0",
+            isCompact
+              ? "grid-cols-[minmax(0,1fr)_auto] items-center gap-0"
+              : "gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
           ].join(" ")}
         >
           <div
@@ -672,9 +674,14 @@ export function Dashboard({
             </div>
           </div>
 
+          {isCompact ? <CompactJoyField /> : null}
+
           <div
             className={[
-              "dashboard-reveal-account flex w-full flex-wrap items-center justify-between gap-2 justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
+              "dashboard-reveal-account flex flex-wrap items-center gap-2",
+              isCompact
+                ? "w-auto justify-self-end"
+                : "w-full justify-between justify-self-start sm:w-auto sm:justify-start lg:justify-self-end",
             ].join(" ")}
           >
             {!isCompact ? (
@@ -705,8 +712,6 @@ export function Dashboard({
             />
           </div>
         </header>
-
-        {isCompact ? <CompactJoyField /> : null}
 
         {errorMessage ? (
           <Alert variant="destructive" className="app-message-enter">

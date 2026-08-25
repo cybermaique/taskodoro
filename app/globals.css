@@ -2910,14 +2910,14 @@ body,
   position: relative;
   isolation: isolate;
   width: 100%;
-  height: 2.75rem;
+  height: 5rem;
   overflow: hidden;
   pointer-events: none;
 }
 
 .compact-joy-field__halo {
   position: absolute;
-  inset: 12% 16%;
+  inset: 6% 4%;
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
@@ -2969,6 +2969,7 @@ body,
     transparent 100%
   );
   filter: blur(0.65px);
+  --joy-tilt: 0deg;
   transform: translateY(-50%);
   animation: compact-joy-ribbon 5.6s ease-in-out infinite;
 }
@@ -2977,9 +2978,32 @@ body,
   top: 53%;
   opacity: 0.4;
   filter: blur(1px);
+  --joy-tilt: -3deg;
   transform: translateY(-50%) scaleX(0.72) rotate(-3deg);
   animation-delay: -2.2s;
   animation-duration: 6.4s;
+}
+
+.compact-joy-field__ribbon--upper {
+  top: 19%;
+  left: 14%;
+  width: 68%;
+  --joy-tilt: -2deg;
+  opacity: 0.42;
+  transform: translateY(-50%) rotate(-2deg) scaleX(0.78);
+  animation-delay: -1.4s;
+  animation-duration: 6.2s;
+}
+
+.compact-joy-field__ribbon--lower {
+  top: 81%;
+  left: 11%;
+  width: 72%;
+  --joy-tilt: 2deg;
+  opacity: 0.34;
+  transform: translateY(-50%) rotate(2deg) scaleX(0.7);
+  animation-delay: -3.1s;
+  animation-duration: 6.8s;
 }
 
 .compact-joy-field__particle {
@@ -3051,11 +3075,11 @@ body,
   0%,
   100% {
     opacity: 0.36;
-    transform: translateY(-50%) scaleX(0.74);
+    transform: translateY(-50%) scaleX(0.74) rotate(var(--joy-tilt, 0deg));
   }
   50% {
     opacity: 0.9;
-    transform: translateY(-50%) scaleX(1.04);
+    transform: translateY(-50%) scaleX(1.04) rotate(var(--joy-tilt, 0deg));
   }
 }
 
