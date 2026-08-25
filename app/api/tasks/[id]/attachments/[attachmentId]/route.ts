@@ -11,10 +11,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id, attachmentId } = await params;
     const { attachment, data } = await getTaskAttachment(id, attachmentId);
+    const extension = attachment.file_name.split(".").pop()?.toLocaleLowerCase();
+    const mimeType =
+      attachment.mime_type === "application/octet-stream" && extension === "pdf"
+        ? "application/pdf"
+        : attachment.mime_type;
+    const canPreviewInline =
+      mimeType.startsWith("image/") ||
+      mimeType.startsWith("audio/") ||
+      mimeType.startsWith("text/") ||
+      mimeType === "application/pdf" ||
+      mimeType === "application/json";
+    const forceDownload = request.nextUrl.searchParams.get("download") === "1";
     return new NextResponse(data, {
       headers: {
-        "Content-Type": attachment.mime_type,
-        "Content-Disposition": `${attachment.mime_type.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(attachment.file_name)}"`,
+        "Content-Type": mimeType,
+        "Content-Disposition": `${canPreviewInline && !forceDownload ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(attachment.file_name)}`,
         "Cache-Control": "private, max-age=3600",
       },
     });

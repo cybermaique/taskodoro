@@ -34,6 +34,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
 import {
   getTaskTypeOptions,
+  getDefaultTaskType,
+  getTaskCategoryLabel,
+  DATE_DESCRIPTION_TEMPLATE,
+  TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
   type TaskPriority,
   type TaskType,
@@ -50,7 +54,6 @@ interface TaskFormValues {
 interface TaskFormProps {
   isSubmitting: boolean;
   isCompact?: boolean;
-  categorySuggestions: string[];
   onDirtyChange?: (isDirty: boolean) => void;
   onCreate: (values: {
     title: string;
@@ -70,16 +73,6 @@ const EMPTY_VALUES: TaskFormValues = {
   type: "task",
   category: "trabalho",
 };
-
-const DATE_DESCRIPTION_TEMPLATE = `Onde:
-Mora:
-Trabalho:
-Idade:
-Signo:
-Trabalho:
-Tem filho:
-Nota sexo:
-Nota pessoal:`;
 
 const compactSelectClass =
   "h-12 min-h-12 w-full rounded-2xl border-slate-900/10 bg-white py-0 pl-10 pr-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20";
@@ -103,7 +96,6 @@ function getTaskTypeLabel(type: TaskType) {
 export function TaskForm({
   isSubmitting,
   isCompact = false,
-  categorySuggestions,
   onDirtyChange,
   onCreate,
 }: TaskFormProps) {
@@ -564,25 +556,20 @@ export function TaskForm({
                   return {
                     ...current,
                     category,
-                    type:
-                      getTaskTypeOptions(category).some(
-                        (option) => option.value === current.type,
-                      )
-                        ? current.type
-                        : "task",
+                    type: getDefaultTaskType(category),
                   };
                 })
               }
             >
               <SelectTrigger aria-label="Categoria" className={compactSelectClass}>
                 <span className="flex h-full items-center text-sm">
-                  {values.category}
+                  {getTaskCategoryLabel(values.category)}
                 </span>
               </SelectTrigger>
               <SelectContent>
-                {categorySuggestions.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
+                {TASK_CATEGORY_OPTIONS.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
                   </SelectItem>
                 ))}
               </SelectContent>
