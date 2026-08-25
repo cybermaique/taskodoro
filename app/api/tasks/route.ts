@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
       body.type === "feature" ||
       body.type === "bug" ||
       body.type === "improvement" ||
-      body.type === "task" ||
       body.type === "date" ||
       body.type === "study" ||
       body.type === "travel" ||

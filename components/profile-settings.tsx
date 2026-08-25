@@ -338,7 +338,7 @@ export function ProfileSettings({
           ref={profileTriggerRef}
           type="button"
           variant="outline"
-          className="profile-account-trigger h-14 max-w-[17rem] gap-3 rounded-full px-2.5 transition-all duration-300 sm:h-12 sm:px-3"
+          className="profile-account-trigger h-14 max-w-[17rem] gap-3 rounded-full px-2.5 transition-all duration-300 sm:h-14 sm:px-3"
           onClick={() => {
             if (profileMenuOpen) {
               setProfileMenuOpen(false);
@@ -555,7 +555,7 @@ export function ProfileSettings({
                   aria-pressed={displayMode === mode}
                 >
                   <span className="block text-xs font-semibold">{label}</span>
-                  <span className={`mt-0.5 block text-[0.68rem] ${displayMode === mode ? "text-white/70 dark:text-zinc-950/65" : "text-slate-400 dark:text-white/40"}`}>
+                  <span className={`mt-0.5 block text-[0.68rem] ${displayMode === mode ? "text-white/70 dark:text-white/70" : "text-slate-400 dark:text-white/40"}`}>
                     {description}
                   </span>
                 </button>

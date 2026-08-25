@@ -33,7 +33,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       body.type === "feature" ||
       body.type === "bug" ||
       body.type === "improvement" ||
-      body.type === "task" ||
       body.type === "date" ||
       body.type === "study" ||
       body.type === "travel" ||

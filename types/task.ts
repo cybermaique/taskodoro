@@ -8,7 +8,6 @@ export type TaskType =
   | "feature"
   | "bug"
   | "improvement"
-  | "task"
   | "date"
   | "study"
   | "travel"
@@ -20,7 +19,6 @@ export const WORK_TASK_TYPE_OPTIONS = [
   { value: "feature", label: "Feature" },
   { value: "bug", label: "Bug" },
   { value: "improvement", label: "Melhoria" },
-  { value: "task", label: "Tarefa" },
 ] as const satisfies ReadonlyArray<{ value: TaskType; label: string }>;
 
 export const PERSONAL_TASK_TYPE_OPTIONS = [
@@ -67,7 +65,7 @@ export function getTaskTypeOptions(category: string | null | undefined) {
 }
 
 export function getDefaultTaskType(category: string | null | undefined): TaskType {
-  return isPersonalCategory(category) ? "personal" : "task";
+  return isPersonalCategory(category) ? "personal" : "feature";
 }
 
 export function getTaskCategoryLabel(category: string | null | undefined) {

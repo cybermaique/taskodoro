@@ -8,7 +8,7 @@ create table if not exists public.tasks (
   description text,
   status text not null default 'not_started' check (status in ('not_started', 'in_progress', 'waiting', 'completed')),
   priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
-  type text not null default 'task' check (type in ('feature', 'bug', 'improvement', 'task', 'date', 'study', 'travel', 'health', 'finance', 'personal')),
+  type text not null default 'feature' check (type in ('feature', 'bug', 'improvement', 'date', 'study', 'travel', 'health', 'finance', 'personal')),
   category text,
   position integer not null default 0,
   deleted_at timestamptz,

@@ -31,6 +31,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
 import {
   getTaskTypeOptions,
@@ -71,7 +72,7 @@ const EMPTY_VALUES: TaskFormValues = {
   title: "",
   description: "",
   priority: "medium",
-  type: "task",
+  type: "feature",
   category: "trabalho",
 };
 
@@ -91,7 +92,7 @@ function getPriorityLabel(priority: TaskPriority) {
 }
 
 function getTaskTypeLabel(type: TaskType) {
-  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Tarefa";
+  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Feature";
 }
 
 export function TaskForm({
@@ -397,9 +398,14 @@ export function TaskForm({
               <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-200">Dados estruturados do Date</h3>
               <p className="mt-1 text-xs text-slate-500 dark:text-white/45">Preencha estes dados primeiro; use a descrição para observações adicionais.</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"], ["location", "Local", "text"], ["date_at", "Data do date", "date"]].map(([key, label, type]) => (
+                {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"], ["location", "Local", "text"]].map(([key, label, type]) => (
                   <Input key={key} type={type} placeholder={label} value={String(dateDetails[key as keyof typeof dateDetails] ?? "")} onChange={(event) => setDateDetails((current) => ({ ...current, [key]: type === "number" ? (event.target.value ? Number(event.target.value) : null) : event.target.value || null }))} />
                 ))}
+                <DatePicker
+                  value={dateDetails.date_at ?? null}
+                  onChange={(value) => setDateDetails((current) => ({ ...current, date_at: value }))}
+                  placeholder="Data do date"
+                />
                 <select className="h-10 rounded-xl border border-slate-900/10 bg-white px-3 text-sm dark:border-white/10 dark:bg-black/20" value={dateDetails.has_children === null || dateDetails.has_children === undefined ? "" : String(dateDetails.has_children)} onChange={(event) => setDateDetails((current) => ({ ...current, has_children: event.target.value === "" ? null : event.target.value === "true" }))}>
                   <option value="">Tem filho?</option><option value="true">Sim</option><option value="false">Não</option>
                 </select>
@@ -551,7 +557,7 @@ export function TaskForm({
               disabled={isSubmitting}
               onValueChange={(value) =>
                 setValues((current) => {
-                  const type = (value ?? "task") as TaskType;
+                  const type = (value ?? "feature") as TaskType;
                   return {
                     ...current,
                     type,

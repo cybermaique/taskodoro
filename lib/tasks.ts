@@ -171,7 +171,7 @@ function normalizeTaskType(value: string | undefined): TaskType {
     return value;
   }
 
-  return "task";
+  return "feature";
 }
 
 function getAttachmentMimeType(file: File) {
