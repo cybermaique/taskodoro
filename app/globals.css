@@ -2921,7 +2921,7 @@ body,
 
 .compact-joy-field__halo {
   position: absolute;
-  inset: 6% 4%;
+  inset: -8% 0;
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
@@ -2989,7 +2989,7 @@ body,
 }
 
 .compact-joy-field__ribbon--upper {
-  top: 19%;
+  top: 8%;
   left: 14%;
   width: 68%;
   --joy-tilt: -2deg;
@@ -3000,7 +3000,7 @@ body,
 }
 
 .compact-joy-field__ribbon--lower {
-  top: 81%;
+  top: 92%;
   left: 11%;
   width: 72%;
   --joy-tilt: 2deg;
