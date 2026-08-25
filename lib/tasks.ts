@@ -7,6 +7,8 @@ import type {
   Subtask,
   Task,
   TaskAttachment,
+  TaskComment,
+  DateDetails,
   TaskDescriptionHistory,
   TaskPriority,
   TaskStatusHistory,
@@ -24,6 +26,8 @@ const TASK_COLUMNS = `
   priority,
   type,
   category,
+  position,
+  deleted_at,
   created_at,
   completed_at,
   updated_at,
@@ -33,6 +37,8 @@ const TASK_COLUMNS = `
     file_name,
     mime_type,
     storage_path,
+    file_size,
+    last_viewed_at,
     created_at
   ),
   subtasks(
@@ -57,6 +63,13 @@ const TASK_COLUMNS = `
     task_id,
     description,
     changed_at
+  ),
+  task_date_details(
+    task_id,age,sign,address,height,work,has_children,location,date_at,
+    personality_rating,face_rating,body_rating,sex_rating
+  ),
+  task_comments(
+    id,task_id,content,created_at
   )
 `;
 
@@ -97,6 +110,8 @@ function mapTask(task: Task): Task {
     task_attachments?: TaskAttachment[];
     task_status_history?: TaskStatusHistory[];
     task_description_history?: TaskDescriptionHistory[];
+    task_date_details?: DateDetails | DateDetails[];
+    task_comments?: TaskComment[];
   };
   const statusHistory = Array.isArray(rawTask.task_status_history)
     ? rawTask.task_status_history
@@ -130,6 +145,14 @@ function mapTask(task: Task): Task {
       : Array.isArray(task.description_history)
         ? task.description_history
         : [],
+    date_details: Array.isArray(rawTask.task_date_details)
+      ? rawTask.task_date_details[0] ?? null
+      : rawTask.task_date_details ?? task.date_details ?? null,
+    comments: Array.isArray(rawTask.task_comments)
+      ? [...rawTask.task_comments].sort((left, right) =>
+          new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+        )
+      : task.comments ?? [],
   };
 }
 
@@ -190,6 +213,7 @@ export async function createTaskAttachment({
     file_name: file.name || `arquivo.${extension}`,
     mime_type: mimeType,
     storage_path: storagePath,
+    file_size: file.size,
   });
 
   if (insertError) {
@@ -204,7 +228,7 @@ export async function getTaskAttachment(taskId: string, attachmentId: string) {
   const supabase = await createSupabaseServerClient();
   const { data: attachment, error } = await supabase
     .from("task_attachments")
-    .select("id,task_id,file_name,mime_type,storage_path,created_at")
+    .select("id,task_id,file_name,mime_type,storage_path,file_size,last_viewed_at,created_at")
     .eq("id", attachmentId)
     .eq("task_id", taskId)
     .single();
@@ -247,8 +271,9 @@ export async function listTasks() {
   const { data, error } = await supabase
     .from("tasks")
     .select(TASK_COLUMNS)
-    .order("created_at", { ascending: false })
-    .order("created_at", { foreignTable: "subtasks", ascending: true });
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .order("position", { foreignTable: "subtasks", ascending: true });
 
   if (error) {
     throw new Error(error.message);
@@ -274,6 +299,9 @@ export async function getTaskById(id: string) {
 
 export async function createTask(input: CreateTaskInput) {
   const supabase = await createSupabaseServerClient();
+  const { data: lastTask } = await supabase
+    .from("tasks").select("position").is("deleted_at", null)
+    .order("position", { ascending: false }).limit(1).maybeSingle();
   const payload = {
     title: input.title.trim(),
     description: normalizeNullableText(input.description),
@@ -281,6 +309,7 @@ export async function createTask(input: CreateTaskInput) {
     priority: normalizePriority(input.priority),
     type: normalizeTaskType(input.type),
     category: normalizeNullableText(input.category),
+    position: (lastTask?.position ?? -1) + 1,
     completed_at: null,
   };
 
@@ -295,6 +324,12 @@ export async function createTask(input: CreateTaskInput) {
   }
 
   const createdTask = data as unknown as Task;
+  if (input.date_details) {
+    const { error: detailsError } = await supabase
+      .from("task_date_details")
+      .upsert({ task_id: createdTask.id, ...input.date_details });
+    if (detailsError) throw new Error(detailsError.message);
+  }
   const subtaskTitles = (input.subtasks ?? [])
     .map((title) => title.trim())
     .filter(Boolean);
@@ -346,6 +381,13 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
 
   if (input.category !== undefined) {
     updatePayload.category = normalizeNullableText(input.category);
+  }
+
+  if (input.date_details !== undefined) {
+    const { error: detailsError } = await supabase
+      .from("task_date_details")
+      .upsert({ task_id: id, ...input.date_details });
+    if (detailsError) throw new Error(detailsError.message);
   }
 
   if (!Object.keys(updatePayload).length) {
@@ -400,7 +442,10 @@ export async function restoreTaskDescription(
 
 export async function deleteTask(id: string) {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
 
   if (error) {
     throw new Error(error.message);
@@ -504,6 +549,59 @@ export async function deleteSubtask(id: string) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function listTrashedTasks() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("tasks").select(TASK_COLUMNS).not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as Task[]).map(mapTask);
+}
+
+export async function restoreTask(id: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("tasks").update({ deleted_at: null }).eq("id", id);
+  if (error) throw new Error(error.message);
+  return getTaskById(id);
+}
+
+export async function reorderTasks(orderedTaskIds: string[]) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("tasks").select("id").is("deleted_at", null);
+  if (error) throw new Error(error.message);
+  const currentIds = (data ?? []).map((task) => task.id);
+  const ids = new Set(orderedTaskIds);
+  if (ids.size !== currentIds.length || orderedTaskIds.length !== currentIds.length || !currentIds.every((id) => ids.has(id))) {
+    throw new Error("A ordem das tarefas está desatualizada.");
+  }
+  const results = await Promise.all(orderedTaskIds.map((id, position) => supabase.from("tasks").update({ position }).eq("id", id)));
+  const updateError = results.find((result) => result.error)?.error;
+  if (updateError) throw new Error(updateError.message);
+  return listTasks();
+}
+
+export async function createTaskComment(taskId: string, content: string) {
+  const supabase = await createSupabaseServerClient();
+  const text = content.trim();
+  if (!text) throw new Error("Escreva um comentário.");
+  const { error } = await supabase.from("task_comments").insert({ task_id: taskId, content: text });
+  if (error) throw new Error(error.message);
+  return getTaskById(taskId);
+}
+
+export async function deleteTaskComment(taskId: string, commentId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("task_comments").delete().eq("id", commentId).eq("task_id", taskId);
+  if (error) throw new Error(error.message);
+  return getTaskById(taskId);
+}
+
+export async function markTaskAttachmentViewed(taskId: string, attachmentId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("task_attachments").update({ last_viewed_at: new Date().toISOString() }).eq("id", attachmentId).eq("task_id", taskId);
+  if (error) throw new Error(error.message);
 }
 
 export async function reorderSubtasks(taskId: string, orderedSubtaskIds: string[]) {

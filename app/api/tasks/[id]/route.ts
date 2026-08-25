@@ -55,6 +55,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         body.category === null || typeof body.category === "string"
           ? body.category
           : undefined,
+      date_details: body.date_details && typeof body.date_details === "object" ? body.date_details : undefined,
     });
 
     return NextResponse.json({ task });

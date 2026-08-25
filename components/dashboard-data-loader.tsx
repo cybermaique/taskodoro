@@ -25,6 +25,8 @@ const TASK_COLUMNS = `
   priority,
   type,
   category,
+  position,
+  deleted_at,
   created_at,
   completed_at,
   updated_at,
@@ -34,6 +36,8 @@ const TASK_COLUMNS = `
     file_name,
     mime_type,
     storage_path,
+    file_size,
+    last_viewed_at,
     created_at
   ),
   subtasks(
@@ -58,6 +62,9 @@ const TASK_COLUMNS = `
     task_id,
     description,
     changed_at
+  ),
+  task_date_details(task_id,age,sign,address,height,work,has_children,location,date_at,personality_rating,face_rating,body_rating,sex_rating),
+  task_comments(id,task_id,content,created_at)
   )
 `;
 const PROFILE_COLUMNS =
@@ -97,6 +104,12 @@ function mapTask(task: RawTask): Task {
             new Date(right.changed_at).getTime() -
             new Date(left.changed_at).getTime(),
         )
+      : [],
+    date_details: Array.isArray((task as RawTask & { task_date_details?: Task["date_details"][] }).task_date_details)
+      ? (task as RawTask & { task_date_details?: Task["date_details"][] }).task_date_details?.[0] ?? null
+      : null,
+    comments: Array.isArray((task as RawTask & { task_comments?: Task["comments"] }).task_comments)
+      ? (task as RawTask & { task_comments: Task["comments"] }).task_comments
       : [],
   };
 }
@@ -200,9 +213,10 @@ export function DashboardDataLoader({
         supabase
           .from("tasks")
           .select(TASK_COLUMNS)
-          .order("created_at", { ascending: false })
+          .is("deleted_at", null)
+          .order("position", { ascending: true })
           .order("position", { foreignTable: "subtasks", ascending: true }),
-        supabase.from("notes").select("id,title,content,tags,is_pinned,created_at,updated_at").order("created_at", {
+        supabase.from("notes").select("id,title,content,tags,is_pinned,deleted_at,created_at,updated_at,note_attachments(id,note_id,file_name,mime_type,storage_path,file_size,created_at)").is("deleted_at", null).order("created_at", {
           ascending: false,
         }),
         supabase
@@ -221,7 +235,11 @@ export function DashboardDataLoader({
       }
 
       setTasks(((tasksResult.data ?? []) as unknown as RawTask[]).map(mapTask));
-      setNotes((notesResult.data ?? []) as Note[]);
+      setNotes(
+        ((notesResult.data ?? []) as unknown as Array<
+          Note & { note_attachments?: Note["attachments"] }
+        >).map((note) => ({ ...note, attachments: note.note_attachments ?? [] })),
+      );
 
       let nextProfile = profileResult.error
         ? null

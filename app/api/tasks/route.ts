@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
           ? body.category
           : undefined,
       subtasks,
+      date_details: body.date_details && typeof body.date_details === "object" ? body.date_details : undefined,
     });
 
     return NextResponse.json({ task }, { status: 201 });

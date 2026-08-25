@@ -91,6 +91,31 @@ export interface TaskAttachment {
   file_name: string;
   mime_type: string;
   storage_path: string;
+  file_size: number | null;
+  last_viewed_at: string | null;
+  created_at: string;
+}
+
+export interface DateDetails {
+  task_id: string;
+  age: number | null;
+  sign: string | null;
+  address: string | null;
+  height: string | null;
+  work: string | null;
+  has_children: boolean | null;
+  location: string | null;
+  date_at: string | null;
+  personality_rating: number | null;
+  face_rating: number | null;
+  body_rating: number | null;
+  sex_rating: number | null;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  content: string;
   created_at: string;
 }
 
@@ -117,6 +142,8 @@ export interface Task {
   priority: TaskPriority;
   type: TaskType;
   category: string | null;
+  position: number;
+  deleted_at: string | null;
   created_at: string;
   completed_at: string | null;
   updated_at: string;
@@ -124,6 +151,8 @@ export interface Task {
   subtasks: Subtask[];
   status_history: TaskStatusHistory[];
   description_history: TaskDescriptionHistory[];
+  date_details: DateDetails | null;
+  comments: TaskComment[];
 }
 
 export type TaskView = "all" | "work" | "personal" | "study" | "travel";
@@ -135,6 +164,7 @@ export interface CreateTaskInput {
   type?: TaskType;
   category?: string | null;
   subtasks?: string[];
+  date_details?: Partial<Omit<DateDetails, "task_id">> | null;
 }
 
 export interface UpdateTaskInput {
@@ -144,6 +174,7 @@ export interface UpdateTaskInput {
   priority?: TaskPriority;
   type?: TaskType;
   category?: string | null;
+  date_details?: Partial<Omit<DateDetails, "task_id">> | null;
 }
 
 export interface CreateSubtaskInput {

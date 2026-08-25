@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isAuthorizedRequest, unauthorizedResponse } from "@/lib/access";
-import { deleteTaskAttachment, getTaskAttachment } from "@/lib/tasks";
+import { deleteTaskAttachment, getTaskAttachment, markTaskAttachmentViewed } from "@/lib/tasks";
 
 interface RouteParams { params: Promise<{ id: string; attachmentId: string }> }
 
@@ -46,5 +46,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro ao excluir imagem.";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  if (!isAuthorizedRequest(request)) return unauthorizedResponse();
+  try {
+    const { id, attachmentId } = await params;
+    await markTaskAttachmentViewed(id, attachmentId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível registrar a visualização." }, { status: 500 });
   }
 }
