@@ -1,10 +1,10 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import type { CreateNoteInput, Note, UpdateNoteInput } from "@/types/note";
+import type { CreateNoteInput, Note, NoteAttachment, UpdateNoteInput } from "@/types/note";
 
-const NOTE_COLUMNS =
-  "id,title,content,tags,is_pinned,created_at,updated_at";
+const NOTE_COLUMNS = `id,title,content,tags,is_pinned,deleted_at,created_at,updated_at,
+  note_attachments(id,note_id,file_name,mime_type,storage_path,file_size,created_at)`;
 
 function normalizeNoteTitle(title: string) {
   return title.trim().slice(0, 160);
@@ -24,7 +24,45 @@ function mapNote(note: Note): Note {
     ...note,
     tags: Array.isArray(note.tags) ? note.tags : null,
     is_pinned: note.is_pinned === true,
+    attachments: Array.isArray((note as Note & { note_attachments?: NoteAttachment[] }).note_attachments)
+      ? (note as Note & { note_attachments: NoteAttachment[] }).note_attachments
+      : note.attachments ?? [],
   };
+}
+
+function attachmentMimeType(file: File) {
+  return file.type || "application/octet-stream";
+}
+
+export async function createNoteAttachment(noteId: string, file: File) {
+  const supabase = await createSupabaseServerClient();
+  const extension = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || "bin";
+  const storagePath = `${noteId}/${crypto.randomUUID()}.${extension}`;
+  const mimeType = attachmentMimeType(file);
+  const { error: uploadError } = await supabase.storage.from("note-attachments").upload(storagePath, file, { contentType: mimeType });
+  if (uploadError) throw new Error(uploadError.message);
+  const { error } = await supabase.from("note_attachments").insert({ note_id: noteId, file_name: file.name || `arquivo.${extension}`, mime_type: mimeType, storage_path: storagePath, file_size: file.size });
+  if (error) { await supabase.storage.from("note-attachments").remove([storagePath]); throw new Error(error.message); }
+  return getNoteById(noteId);
+}
+
+export async function getNoteAttachment(noteId: string, attachmentId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data: attachment, error } = await supabase.from("note_attachments").select("id,note_id,file_name,mime_type,storage_path,file_size,created_at").eq("id", attachmentId).eq("note_id", noteId).single();
+  if (error) throw new Error(error.message);
+  const { data, error: downloadError } = await supabase.storage.from("note-attachments").download((attachment as NoteAttachment).storage_path);
+  if (downloadError) throw new Error(downloadError.message);
+  return { attachment: attachment as NoteAttachment, data };
+}
+
+export async function deleteNoteAttachment(noteId: string, attachmentId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("note_attachments").select("storage_path").eq("id", attachmentId).eq("note_id", noteId).single();
+  if (error) throw new Error(error.message);
+  const { error: deleteError } = await supabase.from("note_attachments").delete().eq("id", attachmentId).eq("note_id", noteId);
+  if (deleteError) throw new Error(deleteError.message);
+  await supabase.storage.from("note-attachments").remove([(data as { storage_path: string }).storage_path]);
+  return getNoteById(noteId);
 }
 
 export async function listNotes() {
@@ -32,13 +70,14 @@ export async function listNotes() {
   const { data, error } = await supabase
     .from("notes")
     .select(NOTE_COLUMNS)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as Note[]).map(mapNote);
+  return ((data ?? []) as unknown as Note[]).map(mapNote);
 }
 
 export async function getNoteById(id: string) {
@@ -53,7 +92,7 @@ export async function getNoteById(id: string) {
     throw new Error(error.message);
   }
 
-  return mapNote(data as Note);
+  return mapNote(data as unknown as Note);
 }
 
 export async function createNote(input: CreateNoteInput) {
@@ -84,7 +123,7 @@ export async function createNote(input: CreateNoteInput) {
     throw new Error(error.message);
   }
 
-  return mapNote(data as Note);
+  return mapNote(data as unknown as Note);
 }
 
 export async function updateNote(id: string, input: UpdateNoteInput) {
@@ -129,14 +168,35 @@ export async function updateNote(id: string, input: UpdateNoteInput) {
     throw new Error(error.message);
   }
 
-  return mapNote(data as Note);
+  return mapNote(data as unknown as Note);
 }
 
 export async function deleteNote(id: string) {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("notes").delete().eq("id", id);
+  const { error } = await supabase
+    .from("notes")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
 
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function listTrashedNotes() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("notes")
+    .select(NOTE_COLUMNS)
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as Note[]).map(mapNote);
+}
+
+export async function restoreNote(id: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("notes").update({ deleted_at: null }).eq("id", id);
+  if (error) throw new Error(error.message);
+  return getNoteById(id);
 }

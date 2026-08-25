@@ -31,16 +31,17 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { expandSlashCodeCommand } from "@/lib/text-shortcuts";
 import {
   getTaskTypeOptions,
   getDefaultTaskType,
   getTaskCategoryLabel,
-  DATE_DESCRIPTION_TEMPLATE,
   TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
   type TaskPriority,
   type TaskType,
+  type DateDetails,
 } from "@/types/task";
 
 interface TaskFormValues {
@@ -63,6 +64,7 @@ interface TaskFormProps {
     category?: string | null;
     attachments?: File[];
     subtasks?: string[];
+    date_details?: Partial<Omit<DateDetails, "task_id">>;
   }) => Promise<void>;
 }
 
@@ -70,7 +72,7 @@ const EMPTY_VALUES: TaskFormValues = {
   title: "",
   description: "",
   priority: "medium",
-  type: "task",
+  type: "feature",
   category: "trabalho",
 };
 
@@ -90,7 +92,7 @@ function getPriorityLabel(priority: TaskPriority) {
 }
 
 function getTaskTypeLabel(type: TaskType) {
-  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Tarefa";
+  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Feature";
 }
 
 export function TaskForm({
@@ -104,6 +106,7 @@ export function TaskForm({
   const [attachments, setAttachments] = useState<File[]>([]);
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [subtaskDraft, setSubtaskDraft] = useState("");
+  const [dateDetails, setDateDetails] = useState<Partial<Omit<DateDetails, "task_id">>>({});
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
   const successTimeoutRef = useRef<number | null>(null);
@@ -229,12 +232,14 @@ export function TaskForm({
         category: values.category.trim() || null,
         attachments: attachments.length ? attachments : undefined,
         subtasks: subtasksToCreate.length ? subtasksToCreate : undefined,
+        date_details: values.type === "date" ? dateDetails : undefined,
       });
 
       setValues(EMPTY_VALUES);
       setAttachments([]);
       setSubtasks([]);
       setSubtaskDraft("");
+      setDateDetails({});
       setJustCreated(true);
       if (successTimeoutRef.current !== null) {
         window.clearTimeout(successTimeoutRef.current);
@@ -388,18 +393,52 @@ export function TaskForm({
             required
           />
 
+          {values.type === "date" ? (
+            <section className="rounded-2xl border border-pink-500/20 bg-pink-500/[0.04] p-3">
+              <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-200">Dados estruturados do Date</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-white/45">Preencha estes dados primeiro; use a descrição para observações adicionais.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"], ["location", "Local", "text"]].map(([key, label, type]) => (
+                  <Input key={key} type={type} placeholder={label} value={String(dateDetails[key as keyof typeof dateDetails] ?? "")} onChange={(event) => setDateDetails((current) => ({ ...current, [key]: type === "number" ? (event.target.value ? Number(event.target.value) : null) : event.target.value || null }))} />
+                ))}
+                <DatePicker
+                  value={dateDetails.date_at ?? null}
+                  onChange={(value) => setDateDetails((current) => ({ ...current, date_at: value }))}
+                  placeholder="Data do date"
+                />
+                <select className="h-10 rounded-xl border border-slate-900/10 bg-white px-3 text-sm dark:border-white/10 dark:bg-black/20" value={dateDetails.has_children === null || dateDetails.has_children === undefined ? "" : String(dateDetails.has_children)} onChange={(event) => setDateDetails((current) => ({ ...current, has_children: event.target.value === "" ? null : event.target.value === "true" }))}>
+                  <option value="">Tem filho?</option><option value="true">Sim</option><option value="false">Não</option>
+                </select>
+                {[["personality_rating", "Nota personalidade"], ["face_rating", "Nota rosto"], ["body_rating", "Nota corpo"], ["sex_rating", "Nota sexo"]].map(([key, label]) => (
+                  <Select
+                    key={key}
+                    value={dateDetails[key as keyof typeof dateDetails] == null ? "unrated" : String(dateDetails[key as keyof typeof dateDetails])}
+                    onValueChange={(value) => setDateDetails((current) => ({ ...current, [key]: value === "unrated" ? null : Number(value) }))}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                      <span className="flex h-full items-center">{dateDetails[key as keyof typeof dateDetails] == null ? `${label} (1–10)` : `${label}: ${dateDetails[key as keyof typeof dateDetails]}`}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unrated">{label} (não informada)</SelectItem>
+                      {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
+                        <SelectItem key={rating} value={String(rating)}>{rating}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {!isCompact ? (
-            <>
-              <Textarea
-                ref={descriptionRef}
-                className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
-                placeholder="Descrição opcional"
-                value={values.description}
-                disabled={isSubmitting}
-                onChange={handleDescriptionChange}
-                rows={3}
-              />
-            </>
+            <Textarea
+              ref={descriptionRef}
+              className="min-h-20 rounded-2xl border-slate-900/10 bg-slate-950/[0.03] shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
+              placeholder={values.type === "date" ? "Observações adicionais (opcional)" : "Descrição opcional"}
+              value={values.description}
+              disabled={isSubmitting}
+              onChange={handleDescriptionChange}
+              rows={3}
+            />
           ) : null}
         </div>
 
@@ -408,7 +447,7 @@ export function TaskForm({
             <ListChecks className="mt-0.5 size-4 shrink-0 text-teal-500" />
             <div className="min-w-0">
               <h3 className="text-sm font-semibold">
-                Subtarefas <span className="font-normal text-slate-500 dark:text-white/45">(opcional)</span>
+                Subtarefas
               </h3>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-white/45">
                 Quebre a tarefa em passos menores e já deixe tudo planejado.
@@ -518,14 +557,10 @@ export function TaskForm({
               disabled={isSubmitting}
               onValueChange={(value) =>
                 setValues((current) => {
-                  const type = (value ?? "task") as TaskType;
+                  const type = (value ?? "feature") as TaskType;
                   return {
                     ...current,
                     type,
-                    description:
-                      type === "date"
-                        ? DATE_DESCRIPTION_TEMPLATE
-                        : current.description,
                   };
                 })
               }

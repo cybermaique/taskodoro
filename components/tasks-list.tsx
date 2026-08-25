@@ -18,11 +18,14 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Bug,
   Heart,
   Circle,
   CirclePlus,
   CalendarDays,
+  Download,
   History,
   Pencil,
   Search,
@@ -53,6 +56,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -78,13 +82,13 @@ import {
   getDefaultTaskType,
   getTaskCategoryLabel,
   getTaskTypeOptions,
-  DATE_DESCRIPTION_TEMPLATE,
   TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
 } from "@/types/task";
 import type {
   Task,
   TaskAttachment,
+  DateDetails,
   TaskDescriptionHistory,
   TaskPriority,
   TaskStatusHistory,
@@ -115,15 +119,17 @@ interface TasksListProps {
   onDeleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   onCreateSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
+  onRenameSubtask: (subtaskId: string, title: string) => Promise<void>;
   onDeleteSubtask: (subtaskId: string) => Promise<void>;
   onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
+  onReorderTasks: (taskIds: string[]) => Promise<void>;
+  onAddTaskComment: (taskId: string, content: string) => Promise<void>;
+  onDeleteTaskComment: (taskId: string, commentId: string) => Promise<void>;
 }
 
-type PriorityFilter = "all" | TaskPriority;
 type TaskSection = Task["status"];
 
 const taskViewStorageKey = "taskboard_task_view_filter";
-const taskPriorityStorageKey = "taskboard_task_priority_filter";
 
 interface EditingState {
   title: string;
@@ -180,7 +186,10 @@ function getStatusLabel(status: Task["status"]) {
 }
 
 function getTaskTypeLabel(type: TaskType) {
-  return TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Tarefa";
+  return (
+    TASK_TYPE_OPTIONS.find((option) => option.value === type)?.label ??
+    "Feature"
+  );
 }
 
 function getTaskTypeClass(type: TaskType) {
@@ -215,22 +224,22 @@ function TaskTypeBadge({ taskType }: { taskType: TaskType }) {
     taskType === "bug"
       ? Bug
       : taskType === "feature"
-      ? Sparkles
-      : taskType === "improvement"
-        ? Lightbulb
-        : taskType === "date"
-          ? Heart
-          : taskType === "study"
-          ? BookOpen
-          : taskType === "travel"
-            ? Plane
-            : taskType === "health"
-              ? HeartPulse
-              : taskType === "finance"
-                ? WalletCards
-                : taskType === "personal"
-                  ? UserRound
-                  : ListTodo;
+        ? Sparkles
+        : taskType === "improvement"
+          ? Lightbulb
+          : taskType === "date"
+            ? Heart
+            : taskType === "study"
+              ? BookOpen
+              : taskType === "travel"
+                ? Plane
+                : taskType === "health"
+                  ? HeartPulse
+                  : taskType === "finance"
+                    ? WalletCards
+                    : taskType === "personal"
+                      ? UserRound
+                      : ListTodo;
 
   return (
     <Badge className={`gap-1 ${getTaskTypeClass(taskType)}`}>
@@ -274,12 +283,7 @@ function TaskHistoryTimeline({
   const history = getTaskHistory(task);
 
   return (
-    <ol
-      className={[
-        "space-y-2.5 pl-1",
-        compact ? "pr-1" : "",
-      ].join(" ")}
-    >
+    <ol className={["space-y-2.5 pl-1", compact ? "pr-1" : ""].join(" ")}>
       {history.map((event, index) => (
         <li key={event.id} className="relative flex min-w-0 gap-2.5">
           {index < history.length - 1 ? (
@@ -332,18 +336,23 @@ function TaskCardAction({
   children,
   destructive = false,
   disabled = false,
+  mobileOnly = false,
 }: {
   label: string;
   onClick: () => void;
   children: ReactNode;
   destructive?: boolean;
   disabled?: boolean;
+  mobileOnly?: boolean;
 }) {
   return (
     <div
       data-task-action="true"
       draggable={false}
-      className="group/task-action relative size-11 shrink-0 cursor-pointer sm:size-8"
+      className={[
+        "group/task-action relative size-11 shrink-0 cursor-pointer sm:size-8",
+        mobileOnly ? "hidden max-md:block" : "",
+      ].join(" ")}
       onPointerDown={(event) => {
         event.stopPropagation();
       }}
@@ -417,9 +426,11 @@ function TaskHistoryAction({
 
       const triggerRect = trigger.getBoundingClientRect();
       const tooltipWidth =
-        tooltipRef.current?.offsetWidth ?? Math.min(384, window.innerWidth - 16);
+        tooltipRef.current?.offsetWidth ??
+        Math.min(384, window.innerWidth - 16);
       const tooltipHeight =
-        tooltipRef.current?.offsetHeight ?? Math.min(480, window.innerHeight - 16);
+        tooltipRef.current?.offsetHeight ??
+        Math.min(480, window.innerHeight - 16);
       const maxLeft = Math.max(8, window.innerWidth - tooltipWidth - 8);
       const left = Math.min(
         Math.max(8, triggerRect.right - tooltipWidth),
@@ -529,10 +540,13 @@ const taskSectionOrder: TaskSection[] = [
 ];
 
 const taskSectionStyles: Record<TaskSection, string> = {
-  not_started: "border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-white/70",
+  not_started:
+    "border-slate-400/40 bg-slate-500/10 text-slate-700 dark:text-white/70",
   in_progress: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-200",
-  waiting: "border-amber-500/40 bg-amber-400/15 text-amber-800 dark:text-amber-200",
-  completed: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
+  waiting:
+    "border-amber-500/40 bg-amber-400/15 text-amber-800 dark:text-amber-200",
+  completed:
+    "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
 };
 
 const taskCardBorderStyles: Record<TaskSection, string> = {
@@ -577,22 +591,31 @@ function areEqualStringArrays(left: string[], right: string[]) {
 }
 
 function readStoredTaskOrder() {
-  if (typeof window === "undefined") {
-    return [];
+  return [];
+}
+
+function isTaskCreatedWithinRange(task: Task, from: string, to: string) {
+  const createdAt = new Date(task.created_at).getTime();
+
+  if (!Number.isFinite(createdAt)) {
+    return !from && !to;
   }
 
-  try {
-    const stored = window.localStorage.getItem(taskOrderStorageKey);
-    const parsed = stored ? (JSON.parse(stored) as unknown) : null;
-
-    return Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "string")
-      ? parsed
-      : [];
-  } catch {
-    window.localStorage.removeItem(taskOrderStorageKey);
-    return [];
+  if (from) {
+    const fromTime = new Date(`${from}T00:00:00`).getTime();
+    if (createdAt < fromTime) {
+      return false;
+    }
   }
+
+  if (to) {
+    const toExclusive = new Date(`${to}T00:00:00`).getTime() + 86_400_000;
+    if (createdAt >= toExclusive) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function normalizeTaskOrder(order: string[], tasks: Task[]) {
@@ -620,7 +643,9 @@ function getOrderWithTaskNearTask(
   }
 
   const currentIds = normalizeTaskOrder(order, tasks);
-  const nextOrder = currentIds.filter((currentTaskId) => currentTaskId !== taskId);
+  const nextOrder = currentIds.filter(
+    (currentTaskId) => currentTaskId !== taskId,
+  );
   const targetIndex = nextOrder.indexOf(targetTaskId);
 
   if (targetIndex === -1) {
@@ -648,11 +673,16 @@ export function TasksList({
   onDeleteAttachment,
   onCreateSubtask,
   onToggleSubtask,
+  onRenameSubtask,
   onDeleteSubtask,
   onReorderSubtasks,
+  onReorderTasks,
+  onAddTaskComment,
+  onDeleteTaskComment,
 }: TasksListProps) {
   const [viewFilter, setViewFilter] = useState<TaskView>("all");
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [search, setSearch] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingState, setEditingState] = useState<EditingState | null>(null);
@@ -673,9 +703,9 @@ export function TasksList({
   const [taskColumnWidths, setTaskColumnWidths] =
     useState<TaskColumnWidths | null>(initialColumnWidths);
   const [canResizeColumns, setCanResizeColumns] = useState(false);
-  const [resizingDividerIndex, setResizingDividerIndex] = useState<number | null>(
-    null,
-  );
+  const [resizingDividerIndex, setResizingDividerIndex] = useState<
+    number | null
+  >(null);
   const [detailsTaskId, setDetailsTaskId] = useState<string | null>(null);
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
   const [descriptionHistoryTaskId, setDescriptionHistoryTaskId] = useState<
@@ -696,8 +726,12 @@ export function TasksList({
   const [deletingConfirm, setDeletingConfirm] = useState(false);
   const [taskContextMenu, setTaskContextMenu] =
     useState<TaskContextMenuState | null>(null);
-  const columnRefs = useRef<Partial<Record<TaskSection, HTMLElement | null>>>({});
-  const taskColumnWidthsRef = useRef<TaskColumnWidths | null>(initialColumnWidths);
+  const columnRefs = useRef<Partial<Record<TaskSection, HTMLElement | null>>>(
+    {},
+  );
+  const taskColumnWidthsRef = useRef<TaskColumnWidths | null>(
+    initialColumnWidths,
+  );
   const resizeStateRef = useRef<ColumnResizeState | null>(null);
   const dropCelebrationTimeoutRef = useRef<number | null>(null);
   const dropCelebrationSequenceRef = useRef(0);
@@ -725,19 +759,6 @@ export function TasksList({
         setViewFilter(storedView as TaskView);
       }
 
-      // Load priority filter
-      const storedPriority = window.localStorage.getItem(
-        taskPriorityStorageKey,
-      );
-      if (
-        storedPriority === "all" ||
-        storedPriority === "high" ||
-        storedPriority === "medium" ||
-        storedPriority === "low"
-      ) {
-        setPriorityFilter(storedPriority as PriorityFilter);
-      }
-
       setHasLoadedFilters(true);
     }, 0);
 
@@ -748,11 +769,6 @@ export function TasksList({
     if (!hasLoadedFilters) return;
     window.localStorage.setItem(taskViewStorageKey, viewFilter);
   }, [viewFilter, hasLoadedFilters]);
-
-  useEffect(() => {
-    if (!hasLoadedFilters) return;
-    window.localStorage.setItem(taskPriorityStorageKey, priorityFilter);
-  }, [priorityFilter, hasLoadedFilters]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -839,7 +855,7 @@ export function TasksList({
         return false;
       }
 
-      if (priorityFilter !== "all" && task.priority !== priorityFilter) {
+      if (!isTaskCreatedWithinRange(task, createdFrom, createdTo)) {
         return false;
       }
 
@@ -861,7 +877,8 @@ export function TasksList({
     });
   }, [
     orderedTasks,
-    priorityFilter,
+    createdFrom,
+    createdTo,
     search,
     viewFilter,
     newlyCreatedTaskId,
@@ -883,8 +900,7 @@ export function TasksList({
   }, [filteredTasks]);
 
   const visibleTaskCount = filteredTasks.length;
-  const detailsTask =
-    tasks.find((task) => task.id === detailsTaskId) ?? null;
+  const detailsTask = tasks.find((task) => task.id === detailsTaskId) ?? null;
 
   const startEdit = (task: Task) => {
     setDetailsTaskId(task.id);
@@ -935,6 +951,7 @@ export function TasksList({
 
     setTaskOrder(nextOrder);
     saveTaskOrder(nextOrder);
+    void onReorderTasks(nextOrder);
     return true;
   };
 
@@ -955,6 +972,7 @@ export function TasksList({
 
     setTaskOrder(nextOrder);
     saveTaskOrder(nextOrder);
+    void onReorderTasks(nextOrder);
     return true;
   };
 
@@ -994,13 +1012,13 @@ export function TasksList({
   };
 
   const contextMenuTask = taskContextMenu
-    ? tasks.find((task) => task.id === taskContextMenu.taskId) ?? null
+    ? (tasks.find((task) => task.id === taskContextMenu.taskId) ?? null)
     : null;
   const historyTask = historyTaskId
-    ? tasks.find((task) => task.id === historyTaskId) ?? null
+    ? (tasks.find((task) => task.id === historyTaskId) ?? null)
     : null;
   const descriptionHistoryTask = descriptionHistoryTaskId
-    ? tasks.find((task) => task.id === descriptionHistoryTaskId) ?? null
+    ? (tasks.find((task) => task.id === descriptionHistoryTaskId) ?? null)
     : null;
   const taskContextMenuActions: ContextMenuAction[] = contextMenuTask
     ? [
@@ -1078,7 +1096,8 @@ export function TasksList({
       }
 
       const targetRect = event.currentTarget.getBoundingClientRect();
-      const insertAfter = event.clientY > targetRect.top + targetRect.height / 2;
+      const insertAfter =
+        event.clientY > targetRect.top + targetRect.height / 2;
 
       if (taskToMove.status === targetTask.status) {
         if (!moveTaskNearTask(taskId, targetTaskId, insertAfter)) {
@@ -1098,8 +1117,7 @@ export function TasksList({
       celebrateDrop(
         taskId,
         dropPoint,
-        taskToMove?.status !== "completed" &&
-          targetTask?.status === "completed"
+        taskToMove?.status !== "completed" && targetTask?.status === "completed"
           ? "complete"
           : "move",
       );
@@ -1281,44 +1299,26 @@ export function TasksList({
           ))}
         </div>
 
-        <div
-          className={
-            isCompact ? "mt-4" : "mt-4 grid gap-2 md:grid-cols-[1.4fr_0.8fr]"
-          }
-        >
+        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,17.5%)_minmax(0,17.5%)]">
           <label className="app-live-search relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar tarefa, categoria ou subtarefa"
+              placeholder="Buscar tarefas..."
             />
           </label>
 
-          {!isCompact ? (
-            <Select
-              value={priorityFilter}
-              onValueChange={(value) =>
-                setPriorityFilter((value ?? "all") as PriorityFilter)
-              }
-            >
-              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-900/10 bg-white py-0 shadow-none md:h-10 dark:border-white/10 dark:bg-black/20">
-                <span className="flex h-full items-center text-sm">
-                  {priorityFilter === "all"
-                    ? "Todas prioridades"
-                    : getPriorityLabel(priorityFilter)}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas prioridades</SelectItem>
-                <SelectItem value="high">Alta</SelectItem>
-                <SelectItem value="medium">Média</SelectItem>
-                <SelectItem value="low">Baixa</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : null}
-
+          <DateRangePicker
+            from={createdFrom || null}
+            to={createdTo || null}
+            onChange={(from, to) => {
+              setCreatedFrom(from);
+              setCreatedTo(to);
+            }}
+            placeholder="Período de criação"
+          />
         </div>
       </div>
 
@@ -1359,27 +1359,27 @@ export function TasksList({
                   }
                   className="dashboard-reveal-column app-column-live flex min-w-0 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1"
                 >
-                <div className="mb-3 flex items-center gap-2 px-1">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${taskSectionStyles[section]}`}
-                  >
-                    {getStatusLabel(section)}
-                  </span>
-                  <span className="ml-auto text-xs text-slate-500 dark:text-white/45">
-                    {tasksByBucket.length}
-                  </span>
-                </div>
+                  <div className="mb-3 flex items-center gap-2 px-1">
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${taskSectionStyles[section]}`}
+                    >
+                      {getStatusLabel(section)}
+                    </span>
+                    <span className="ml-auto text-xs text-slate-500 dark:text-white/45">
+                      {tasksByBucket.length}
+                    </span>
+                  </div>
 
-                <ul
-                  className="min-h-24 space-y-3"
-                  onDragOver={(event) => handleDragOver(event)}
-                  onDrop={(event) => handleDropOnColumn(event, section)}
-                >
-                  {tasksByBucket.length === 0 ? (
-                    <li className="rounded-2xl border border-dashed border-slate-900/15 px-3 py-5 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40">
-                      Arraste uma tarefa para cá
-                    </li>
-                  ) : null}
+                  <ul
+                    className="min-h-24 space-y-3"
+                    onDragOver={(event) => handleDragOver(event)}
+                    onDrop={(event) => handleDropOnColumn(event, section)}
+                  >
+                    {tasksByBucket.length === 0 ? (
+                      <li className="rounded-2xl border border-dashed border-slate-900/15 px-3 py-5 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40">
+                        Arraste uma tarefa para cá
+                      </li>
+                    ) : null}
                     {visibleTasksByBucket.map((task) => {
                       const isCompleted = task.status === "completed";
                       const isBusy = busyTaskId === task.id;
@@ -1467,12 +1467,57 @@ export function TasksList({
                                 event.stopPropagation();
                               }}
                               onClick={(event) => event.stopPropagation()}
-      className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
+                              className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 max-md:translate-y-0 max-md:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
                             >
                               <TaskHistoryAction
                                 task={task}
                                 onClick={() => setHistoryTaskId(task.id)}
                               />
+                              <TaskCardAction
+                                mobileOnly
+                                label="Mover para cima"
+                                disabled={
+                                  isBusy ||
+                                  groupedTasks[task.status][0]?.id === task.id
+                                }
+                                onClick={() => {
+                                  const items = groupedTasks[task.status];
+                                  const index = items.findIndex(
+                                    (item) => item.id === task.id,
+                                  );
+                                  if (index > 0)
+                                    moveTaskNearTask(
+                                      task.id,
+                                      items[index - 1].id,
+                                      false,
+                                    );
+                                }}
+                              >
+                                <ArrowUp className="size-3.5" />
+                              </TaskCardAction>
+                              <TaskCardAction
+                                mobileOnly
+                                label="Mover para baixo"
+                                disabled={
+                                  isBusy ||
+                                  groupedTasks[task.status].at(-1)?.id ===
+                                    task.id
+                                }
+                                onClick={() => {
+                                  const items = groupedTasks[task.status];
+                                  const index = items.findIndex(
+                                    (item) => item.id === task.id,
+                                  );
+                                  if (index >= 0 && index < items.length - 1)
+                                    moveTaskNearTask(
+                                      task.id,
+                                      items[index + 1].id,
+                                      true,
+                                    );
+                                }}
+                              >
+                                <ArrowDown className="size-3.5" />
+                              </TaskCardAction>
                               <TaskCardAction
                                 label="Editar tarefa"
                                 onClick={() => startEdit(task)}
@@ -1509,136 +1554,148 @@ export function TasksList({
                               <TaskCreationDate task={task} />
                             </div>
                           ) : (
-                          <div className="flex min-w-0 flex-1 flex-col gap-3">
-                            <div className="flex min-w-0 items-start">
-                            <div
-                              className={[
-                                "min-w-0 flex-1",
-                                isCompact ? "space-y-2" : "space-y-3",
-                              ].join(" ")}
-                            >
-                              {isEditing ? (
-                                <TaskEditForm
-                                  task={task}
-                                  editingState={editingState}
-                                  setEditingState={setEditingState}
-                                  isSaving={isBusy}
-                                  onCancel={cancelEdit}
-                                  onDirtyChange={onEditDirtyChange}
-                                  onSave={async ({
-                                    attachments,
-                                    attachmentIdsToDelete,
-                                  }) => {
-                                    const nextTitle = editingState.title.trim();
+                            <div className="flex min-w-0 flex-1 flex-col gap-3">
+                              <div className="flex min-w-0 items-start">
+                                <div
+                                  className={[
+                                    "min-w-0 flex-1",
+                                    isCompact ? "space-y-2" : "space-y-3",
+                                  ].join(" ")}
+                                >
+                                  {isEditing ? (
+                                    <TaskEditForm
+                                      task={task}
+                                      editingState={editingState}
+                                      setEditingState={setEditingState}
+                                      isSaving={isBusy}
+                                      onCancel={cancelEdit}
+                                      onDirtyChange={onEditDirtyChange}
+                                      onSave={async ({
+                                        attachments,
+                                        attachmentIdsToDelete,
+                                        dateDetails,
+                                      }) => {
+                                        const nextTitle =
+                                          editingState.title.trim();
 
-                                    if (!nextTitle) {
-                                      return;
-                                    }
+                                        if (!nextTitle) {
+                                          return;
+                                        }
 
-                                    const taskWasUpdated = await onUpdateTask(task.id, {
-                                      title: nextTitle,
-                                      description:
-                                        editingState.description.trim() || null,
-                                      priority: editingState.priority,
-                                      type: editingState.type,
-                                      category:
-                                        editingState.category.trim() || null,
-                                    });
-                                    if (!taskWasUpdated) return;
+                                        const taskWasUpdated =
+                                          await onUpdateTask(task.id, {
+                                            title: nextTitle,
+                                            description:
+                                              editingState.description.trim() ||
+                                              null,
+                                            priority: editingState.priority,
+                                            type: editingState.type,
+                                            category:
+                                              editingState.category.trim() ||
+                                              null,
+                                            date_details: dateDetails,
+                                          });
+                                        if (!taskWasUpdated) return;
 
-                                    for (const attachmentId of attachmentIdsToDelete) {
-                                      await onDeleteAttachment(
-                                        task.id,
-                                        attachmentId,
-                                      );
-                                    }
-                                    for (const attachment of attachments) {
-                                      await onAddAttachment(
-                                        task.id,
-                                        attachment,
-                                      );
-                                    }
-                                    cancelEdit();
-                                  }}
-                                />
-                              ) : (
-                                <>
-                                  <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <button
-                                        type="button"
-                                        onClick={() => setDetailsTaskId(task.id)}
-                                        aria-haspopup="dialog"
-                                        className={[
-                                          "line-clamp-2 w-full cursor-pointer text-left",
-                                          isCompact
-                                            ? "break-words text-base font-semibold leading-snug"
-                                            : "break-words text-lg font-semibold leading-snug",
-                                          isCompleted
-                                            ? "text-slate-400 line-through dark:text-white/35"
-                                            : "",
-                                        ].join(" ")}
-                                      >
-                                        {task.title}
-                                      </button>
-                                      {task.description ? (
-                                        <TaskDescription className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
-                                          {task.description}
-                                        </TaskDescription>
-                                      ) : null}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                    <Badge
-                                      className={getPriorityClass(
-                                        task.priority,
-                                      )}
-                                    >
-                                      {getPriorityLabel(task.priority)}
-                                    </Badge>
-                                    <TaskTypeBadge taskType={task.type} />
-                                    {task.category ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="max-w-full truncate"
-                                        title={task.category}
-                                      >
-                                        {getTaskCategoryLabel(task.category)}
-                                      </Badge>
-                                    ) : null}
-                                    {task.attachments.length ? (
-                                      <TaskAttachmentBadge attachments={task.attachments} />
-                                    ) : null}
-                                    <TaskCreationDate task={task} />
-                                  </div>
-                                </>
-                              )}
-
-                              {hasSubtasks ? (
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
-                                  <span>
-                                    Subtarefas {completedSubtasks}/
-                                    {task.subtasks.length}
-                                  </span>
-                                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
-                                    <div
-                                      className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
-                                      style={{ width: `${subtaskPercent}%` }}
+                                        for (const attachmentId of attachmentIdsToDelete) {
+                                          await onDeleteAttachment(
+                                            task.id,
+                                            attachmentId,
+                                          );
+                                        }
+                                        for (const attachment of attachments) {
+                                          await onAddAttachment(
+                                            task.id,
+                                            attachment,
+                                          );
+                                        }
+                                        cancelEdit();
+                                      }}
                                     />
-                                  </div>
-                                  <span className="min-w-0 max-w-full truncate">
-                                    {task.subtasks.find(
-                                      (subtask) => !subtask.is_completed,
-                                    )?.title ?? "Todas concluídas"}
-                                  </span>
+                                  ) : (
+                                    <>
+                                      <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setDetailsTaskId(task.id)
+                                            }
+                                            aria-haspopup="dialog"
+                                            className={[
+                                              "line-clamp-2 w-full cursor-pointer text-left",
+                                              isCompact
+                                                ? "break-words text-base font-semibold leading-snug"
+                                                : "break-words text-lg font-semibold leading-snug",
+                                              isCompleted
+                                                ? "text-slate-400 line-through dark:text-white/35"
+                                                : "",
+                                            ].join(" ")}
+                                          >
+                                            {task.title}
+                                          </button>
+                                          {task.description ? (
+                                            <TaskDescription className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
+                                              {task.description}
+                                            </TaskDescription>
+                                          ) : null}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <Badge
+                                          className={getPriorityClass(
+                                            task.priority,
+                                          )}
+                                        >
+                                          {getPriorityLabel(task.priority)}
+                                        </Badge>
+                                        <TaskTypeBadge taskType={task.type} />
+                                        {task.category ? (
+                                          <Badge
+                                            variant="outline"
+                                            className="max-w-full truncate"
+                                            title={task.category}
+                                          >
+                                            {getTaskCategoryLabel(
+                                              task.category,
+                                            )}
+                                          </Badge>
+                                        ) : null}
+                                        {task.attachments.length ? (
+                                          <TaskAttachmentBadge
+                                            attachments={task.attachments}
+                                          />
+                                        ) : null}
+                                        <TaskCreationDate task={task} />
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {hasSubtasks ? (
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+                                      <span>
+                                        Subtarefas {completedSubtasks}/
+                                        {task.subtasks.length}
+                                      </span>
+                                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
+                                        <div
+                                          className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
+                                          style={{
+                                            width: `${subtaskPercent}%`,
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="min-w-0 max-w-full truncate">
+                                        {task.subtasks.find(
+                                          (subtask) => !subtask.is_completed,
+                                        )?.title ?? "Todas concluídas"}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                 </div>
-                              ) : null}
-
+                              </div>
                             </div>
-                            </div>
-
-                          </div>
                           )}
                         </li>
                       );
@@ -1719,7 +1776,9 @@ export function TasksList({
         key={detailsTask?.id ?? "closed"}
         task={detailsTask}
         busy={detailsTask ? busyTaskId === detailsTask.id : false}
-        subtaskDraft={detailsTask ? subtaskDraftByTaskId[detailsTask.id] ?? "" : ""}
+        subtaskDraft={
+          detailsTask ? (subtaskDraftByTaskId[detailsTask.id] ?? "") : ""
+        }
         isEditing={Boolean(
           detailsTask && editingTaskId === detailsTask.id && editingState,
         )}
@@ -1742,7 +1801,11 @@ export function TasksList({
           setDescriptionHistoryTaskId(detailsTask.id);
         }}
         onCancelEdit={cancelEdit}
-        onSaveEdit={async ({ attachments, attachmentIdsToDelete }) => {
+        onSaveEdit={async ({
+          attachments,
+          attachmentIdsToDelete,
+          dateDetails,
+        }) => {
           if (!detailsTask || !editingState) return;
           const nextTitle = editingState.title.trim();
 
@@ -1754,6 +1817,7 @@ export function TasksList({
             priority: editingState.priority,
             type: editingState.type,
             category: editingState.category.trim() || null,
+            date_details: dateDetails,
           });
           if (!taskWasUpdated) return;
 
@@ -1774,8 +1838,11 @@ export function TasksList({
           });
         }}
         onToggleSubtask={onToggleSubtask}
+        onRenameSubtask={onRenameSubtask}
         onDeleteSubtask={(subtask) => setConfirmDeleteSubtask(subtask)}
         onReorderSubtasks={onReorderSubtasks}
+        onAddTaskComment={onAddTaskComment}
+        onDeleteTaskComment={onDeleteTaskComment}
         onSubmitSubtask={(event) => {
           if (detailsTask) void submitSubtask(event, detailsTask.id);
         }}
@@ -1788,6 +1855,12 @@ export function TasksList({
         }}
         onOpenAttachment={(index) => {
           if (!detailsTask) return;
+          const attachment = sortAttachments(detailsTask.attachments)[index];
+          if (attachment)
+            void fetch(
+              `/api/tasks/${detailsTask.id}/attachments/${attachment.id}`,
+              { method: "POST" },
+            );
           setAttachmentViewer({
             task: {
               ...detailsTask,
@@ -1889,8 +1962,11 @@ function TaskDetailsDialog({
   onEditDirtyChange,
   onRequestDelete,
   onToggleSubtask,
+  onRenameSubtask,
   onDeleteSubtask,
   onReorderSubtasks,
+  onAddTaskComment,
+  onDeleteTaskComment,
   onSubmitSubtask,
   onSubtaskDraftChange,
   onOpenAttachment,
@@ -1909,18 +1985,29 @@ function TaskDetailsDialog({
   onSaveEdit: (changes: {
     attachments: File[];
     attachmentIdsToDelete: string[];
+    dateDetails?: Partial<Omit<DateDetails, "task_id">>;
   }) => Promise<void>;
   onEditDirtyChange?: (isDirty: boolean) => void;
   onRequestDelete: () => void;
   onToggleSubtask: (subtaskId: string, isCompleted: boolean) => Promise<void>;
+  onRenameSubtask: (subtaskId: string, title: string) => Promise<void>;
   onDeleteSubtask: (subtask: { id: string; title: string }) => void;
   onReorderSubtasks: (taskId: string, subtaskIds: string[]) => Promise<boolean>;
+  onAddTaskComment: (taskId: string, content: string) => Promise<void>;
+  onDeleteTaskComment: (taskId: string, commentId: string) => Promise<void>;
   onSubmitSubtask: (event: FormEvent<HTMLFormElement>) => void;
   onSubtaskDraftChange: (value: string) => void;
   onOpenAttachment: (index: number) => void;
 }) {
-  const [draggingSubtaskId, setDraggingSubtaskId] = useState<string | null>(null);
-  const [dragOverSubtaskId, setDragOverSubtaskId] = useState<string | null>(null);
+  const [draggingSubtaskId, setDraggingSubtaskId] = useState<string | null>(
+    null,
+  );
+  const [dragOverSubtaskId, setDragOverSubtaskId] = useState<string | null>(
+    null,
+  );
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
+  const [commentDraft, setCommentDraft] = useState("");
   const completedSubtasks =
     task?.subtasks.filter((subtask) => subtask.is_completed).length ?? 0;
   const subtaskCount = task?.subtasks.length ?? 0;
@@ -1947,7 +2034,7 @@ function TaskDetailsDialog({
       }}
     >
       <DialogContent
-        className={`grid h-auto w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-0 dark:bg-zinc-950 sm:overflow-hidden sm:rounded-3xl ${dialogSizeClass}`}
+        className={`grid h-auto w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-900/10 bg-white p-0 shadow-2xl shadow-slate-950/25 dark:border-white/15 dark:bg-[#111719] dark:shadow-black/80 sm:overflow-hidden sm:rounded-3xl ${dialogSizeClass}`}
       >
         {task ? (
           <>
@@ -2030,245 +2117,470 @@ function TaskDetailsDialog({
                   onSave={onSaveEdit}
                 />
               ) : (
-              <div className="space-y-8">
-                <section>
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
-                      Descrição
-                    </h3>
-                    {task.description_history.length ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="rounded-full text-xs text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200"
-                        onClick={onOpenDescriptionHistory}
-                      >
-                        <History className="size-3.5" />
-                        Histórico
-                      </Button>
-                    ) : null}
-                  </div>
-                  {task.description ? (
-                    <TaskDescription className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
-                      {task.description}
-                    </TaskDescription>
-                  ) : (
-                    <p className="mt-2 text-sm text-slate-500 dark:text-white/45">
-                      Sem descrição.
-                    </p>
-                  )}
-                </section>
-
-                <section>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                <div className="flex flex-col gap-8">
+                  <section className="order-1">
+                    <div className="flex items-center justify-between gap-3">
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
-                        Anexos
+                        Descrição
                       </h3>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
-                        {task.attachments.length
-                          ? `${task.attachments.length} arquivo(s)`
-                          : "Nenhum arquivo anexado"}
-                      </p>
-                    </div>
-                  </div>
-                  {task.attachments.length ? (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {sortAttachments(task.attachments).map(
-                        (attachment, index) => (
-                          <button
-                            key={attachment.id}
-                            type="button"
-                            className="group/image flex min-w-0 items-center gap-3 rounded-xl border border-slate-900/10 p-2 text-left transition hover:bg-slate-900/[0.03] dark:border-white/10 dark:hover:bg-white/[0.05]"
-                            title={`Abrir ${attachment.file_name}`}
-                            onClick={() => onOpenAttachment(index)}
-                          >
-                            <AttachmentPreview
-                              attachment={attachment}
-                              taskId={task.id}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium" title={attachment.file_name}>
-                                {attachment.file_name}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-slate-500 dark:text-white/45">
-                                {getAttachmentKind(attachment) === "pdf" ? "PDF" : attachment.mime_type || "Arquivo"}
-                              </span>
-                            </span>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  ) : null}
-                </section>
-
-                <section>
-                  <div className="flex items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
-                          Subtarefas {completedSubtasks}/{subtaskCount}
-                        </h3>
-                        <span className="text-xs text-slate-500 dark:text-white/45">
-                          {subtaskPercent}%
-                        </span>
-                      </div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
-                        <div
-                          className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
-                          style={{ width: `${subtaskPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {task.subtasks.length ? (
-                    <ul className="mt-3 space-y-2">
-                      {task.subtasks.map((subtask) => (
-                        <li
-                          key={subtask.id}
-                          draggable={!busy}
-                          onDragStart={(event) => {
-                            const target = event.target as HTMLElement;
-                            if (target.closest("button,input")) {
-                              event.preventDefault();
-                              return;
-                            }
-
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", subtask.id);
-                            setDraggingSubtaskId(subtask.id);
-                          }}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            if (draggingSubtaskId && draggingSubtaskId !== subtask.id) {
-                              event.dataTransfer.dropEffect = "move";
-                              setDragOverSubtaskId(subtask.id);
-                            }
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            const sourceId =
-                              event.dataTransfer.getData("text/plain") || draggingSubtaskId;
-                            if (!sourceId || sourceId === subtask.id || !task) {
-                              setDraggingSubtaskId(null);
-                              setDragOverSubtaskId(null);
-                              return;
-                            }
-
-                            const orderedIds = task.subtasks.map((item) => item.id);
-                            const sourceIndex = orderedIds.indexOf(sourceId);
-                            const targetIndex = orderedIds.indexOf(subtask.id);
-                            if (sourceIndex < 0 || targetIndex < 0) {
-                              setDraggingSubtaskId(null);
-                              setDragOverSubtaskId(null);
-                              return;
-                            }
-
-                            orderedIds.splice(sourceIndex, 1);
-                            orderedIds.splice(orderedIds.indexOf(subtask.id), 0, sourceId);
-                            setDraggingSubtaskId(null);
-                            setDragOverSubtaskId(null);
-                            void onReorderSubtasks(task.id, orderedIds);
-                          }}
-                          onDragEnd={() => {
-                            setDraggingSubtaskId(null);
-                            setDragOverSubtaskId(null);
-                          }}
-                          className={[
-                            "app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 transition dark:bg-white/[0.045]",
-                            draggingSubtaskId === subtask.id ? "opacity-45" : "",
-                            dragOverSubtaskId === subtask.id
-                              ? "ring-2 ring-teal-400/70 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950"
-                              : "",
-                          ].join(" ")}
+                      {task.description_history.length ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-full text-xs text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200"
+                          onClick={onOpenDescriptionHistory}
                         >
-                          <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
-                            <GripVertical
-                              className="size-4 shrink-0 cursor-grab text-slate-400/70 active:cursor-grabbing dark:text-white/35"
-                              aria-hidden="true"
-                            />
-                            <Checkbox
-                              checked={subtask.is_completed}
-                              onCheckedChange={() =>
-                                void onToggleSubtask(
-                                  subtask.id,
-                                  !subtask.is_completed,
-                                )
-                              }
-                              className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
-                            />
-                            <span
-                              title={
-                                subtask.is_completed && subtask.completed_at
-                                  ? `Finalizada em ${formatDateTime(subtask.completed_at)}`
-                                  : undefined
-                              }
-                              className={[
-                                "truncate text-sm",
-                                subtask.is_completed
-                                  ? "text-slate-400 line-through dark:text-white/35"
-                                  : "",
-                              ].join(" ")}
-                            >
-                              {subtask.title}
-                            </span>
-                          </label>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="size-11 touch-manipulation md:size-7"
-                            onClick={() => onDeleteSubtask(subtask)}
-                            aria-label="Excluir subtarefa"
-                          >
-                            <Trash2 className="size-4 text-rose-500" />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-white/40">
-                      <Circle className="size-3" />
-                      Sem subtarefas ainda.
-                    </p>
-                  )}
+                          <History className="size-3.5" />
+                          Histórico
+                        </Button>
+                      ) : null}
+                    </div>
+                    {task.description ? (
+                      <TaskDescription className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/80">
+                        {task.description}
+                      </TaskDescription>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500 dark:text-white/45">
+                        Sem descrição.
+                      </p>
+                    )}
+                  </section>
 
-                  <form
-                    onSubmit={onSubmitSubtask}
-                    aria-busy={busy}
-                    className={[
-                      "mt-3 flex min-w-0 flex-col gap-2 rounded-xl sm:flex-row",
-                      busy ? "subtask-form-loading" : "",
-                    ].join(" ")}
-                  >
-                    <Input
-                      className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
-                      value={subtaskDraft}
-                      disabled={busy}
-                      onChange={(event) =>
-                        onSubtaskDraftChange(event.target.value)
-                      }
-                      placeholder="Nova subtarefa"
-                      maxLength={160}
-                    />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
-                      disabled={busy || !subtaskDraft.trim()}
+                  {task.type === "date" && task.date_details ? (
+                    <section className="order-2 rounded-2xl border border-pink-500/20 bg-pink-500/[0.04] p-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-pink-700 dark:text-pink-200">
+                        Dados do Date
+                      </h3>
+                      <div className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+                        {task.date_details.work ? (
+                          <p>
+                            <span className="text-slate-500 dark:text-white/45">
+                              Trabalho:{" "}
+                            </span>
+                            {task.date_details.work}
+                          </p>
+                        ) : null}
+                        {[
+                          ["Idade", task.date_details.age],
+                          ["Signo", task.date_details.sign],
+                          ["Endereço", task.date_details.address],
+                          ["Altura", task.date_details.height],
+                          [
+                            "Tem filho",
+                            task.date_details.has_children === null
+                              ? null
+                              : task.date_details.has_children
+                                ? "Sim"
+                                : "Não",
+                          ],
+                          ["Local", task.date_details.location],
+                          ["Data", task.date_details.date_at],
+                          [
+                            "Personalidade",
+                            task.date_details.personality_rating,
+                          ],
+                          ["Rosto", task.date_details.face_rating],
+                          ["Corpo", task.date_details.body_rating],
+                          ["Sexo", task.date_details.sex_rating],
+                        ]
+                          .filter(([, value]) => value !== null && value !== "")
+                          .map(([label, value]) => (
+                            <p key={String(label)}>
+                              <span className="text-slate-500 dark:text-white/45">
+                                {label}:{" "}
+                              </span>
+                              {String(value)}
+                            </p>
+                          ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  <section className="order-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                          Anexos
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-white/45">
+                          {task.attachments.length
+                            ? `${task.attachments.length} arquivo(s)`
+                            : "Nenhum arquivo anexado"}
+                        </p>
+                      </div>
+                    </div>
+                    {task.attachments.length ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {sortAttachments(task.attachments).map(
+                          (attachment, index) => (
+                            <div
+                              key={attachment.id}
+                              className="group/image relative min-w-0 rounded-xl border border-slate-900/10 dark:border-white/10"
+                            >
+                              <button
+                                type="button"
+                                className="flex min-w-0 w-full items-center gap-3 rounded-xl p-2 pr-11 text-left transition hover:bg-slate-900/[0.03] dark:hover:bg-white/[0.05]"
+                                title={getAttachmentTooltip(attachment)}
+                                onClick={() => onOpenAttachment(index)}
+                              >
+                                <AttachmentPreview
+                                  attachment={attachment}
+                                  taskId={task.id}
+                                  compact
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span
+                                    className="block truncate text-sm font-medium"
+                                    title={attachment.file_name}
+                                  >
+                                    {attachment.file_name}
+                                  </span>
+                                  <span className="sr-only">
+                                    {getAttachmentKind(attachment) === "pdf"
+                                      ? "PDF"
+                                      : attachment.mime_type || "Arquivo"}{" "}
+                                    · {formatFileSize(attachment.file_size)} · .
+                                    {attachment.file_name
+                                      .split(".")
+                                      .pop()
+                                      ?.toUpperCase() || "ARQ"}{" "}
+                                    · adicionado{" "}
+                                    {formatCompactDate(attachment.created_at)}
+                                    {attachment.last_viewed_at
+                                      ? ` · visto ${formatCompactDate(attachment.last_viewed_at)}`
+                                      : " · não visualizado"}
+                                  </span>
+                                </span>
+                              </button>
+                              <a
+                                href={`${getAttachmentUrl(task.id, attachment.id)}?download=1`}
+                                download={attachment.file_name}
+                                onClick={(event) => event.stopPropagation()}
+                                className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-teal-500/10 hover:text-teal-600 dark:text-white/55 dark:hover:text-teal-300"
+                                aria-label={`Baixar ${attachment.file_name}`}
+                                title="Baixar arquivo"
+                              >
+                                <Download className="size-4" />
+                              </a>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
+                  </section>
+
+                  <section className="order-3">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
+                            Subtarefas {completedSubtasks}/{subtaskCount}
+                          </h3>
+                          <span className="text-xs text-slate-500 dark:text-white/45">
+                            {subtaskPercent}%
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
+                            style={{ width: `${subtaskPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {task.subtasks.length ? (
+                      <ul className="mt-3 space-y-2">
+                        {task.subtasks.map((subtask) => (
+                          <li
+                            key={subtask.id}
+                            draggable={!busy}
+                            onDragStart={(event) => {
+                              const target = event.target as HTMLElement;
+                              if (target.closest("button,input")) {
+                                event.preventDefault();
+                                return;
+                              }
+
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData(
+                                "text/plain",
+                                subtask.id,
+                              );
+                              setDraggingSubtaskId(subtask.id);
+                            }}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              if (
+                                draggingSubtaskId &&
+                                draggingSubtaskId !== subtask.id
+                              ) {
+                                event.dataTransfer.dropEffect = "move";
+                                setDragOverSubtaskId(subtask.id);
+                              }
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              const sourceId =
+                                event.dataTransfer.getData("text/plain") ||
+                                draggingSubtaskId;
+                              if (
+                                !sourceId ||
+                                sourceId === subtask.id ||
+                                !task
+                              ) {
+                                setDraggingSubtaskId(null);
+                                setDragOverSubtaskId(null);
+                                return;
+                              }
+
+                              const orderedIds = task.subtasks.map(
+                                (item) => item.id,
+                              );
+                              const sourceIndex = orderedIds.indexOf(sourceId);
+                              const targetIndex = orderedIds.indexOf(
+                                subtask.id,
+                              );
+                              if (sourceIndex < 0 || targetIndex < 0) {
+                                setDraggingSubtaskId(null);
+                                setDragOverSubtaskId(null);
+                                return;
+                              }
+
+                              orderedIds.splice(sourceIndex, 1);
+                              orderedIds.splice(
+                                orderedIds.indexOf(subtask.id),
+                                0,
+                                sourceId,
+                              );
+                              setDraggingSubtaskId(null);
+                              setDragOverSubtaskId(null);
+                              void onReorderSubtasks(task.id, orderedIds);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingSubtaskId(null);
+                              setDragOverSubtaskId(null);
+                            }}
+                            className={[
+                              "app-subtask-enter flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-950/[0.035] px-2 py-1.5 transition dark:bg-white/[0.045]",
+                              draggingSubtaskId === subtask.id
+                                ? "opacity-45"
+                                : "",
+                              dragOverSubtaskId === subtask.id
+                                ? "ring-2 ring-teal-400/70 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950"
+                                : "",
+                            ].join(" ")}
+                          >
+                            <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <GripVertical
+                                className="size-4 shrink-0 cursor-grab text-slate-400/70 active:cursor-grabbing dark:text-white/35"
+                                aria-hidden="true"
+                              />
+                              <Checkbox
+                                checked={subtask.is_completed}
+                                onCheckedChange={() =>
+                                  void onToggleSubtask(
+                                    subtask.id,
+                                    !subtask.is_completed,
+                                  )
+                                }
+                                className="size-5 after:-inset-3 md:size-4 md:after:-inset-x-3 md:after:-inset-y-2"
+                              />
+                              {editingSubtaskId === subtask.id ? (
+                                <Input
+                                  className="h-8 min-w-0 flex-1"
+                                  value={editingSubtaskTitle}
+                                  autoFocus
+                                  onChange={(event) =>
+                                    setEditingSubtaskTitle(event.target.value)
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (
+                                      event.key === "Enter" &&
+                                      editingSubtaskTitle.trim()
+                                    ) {
+                                      void onRenameSubtask(
+                                        subtask.id,
+                                        editingSubtaskTitle.trim(),
+                                      ).then(() => setEditingSubtaskId(null));
+                                    }
+                                    if (event.key === "Escape")
+                                      setEditingSubtaskId(null);
+                                  }}
+                                />
+                              ) : (
+                                <span
+                                  title={
+                                    subtask.is_completed && subtask.completed_at
+                                      ? `Finalizada em ${formatDateTime(subtask.completed_at)}`
+                                      : undefined
+                                  }
+                                  className={[
+                                    "truncate text-sm",
+                                    subtask.is_completed
+                                      ? "text-slate-400 line-through dark:text-white/35"
+                                      : "",
+                                  ].join(" ")}
+                                >
+                                  {subtask.title}
+                                </span>
+                              )}
+                            </label>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              className="size-9"
+                              onClick={() => {
+                                setEditingSubtaskId(subtask.id);
+                                setEditingSubtaskTitle(subtask.title);
+                              }}
+                              aria-label={`Editar ${subtask.title}`}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              className="size-11 touch-manipulation md:size-7"
+                              onClick={() => onDeleteSubtask(subtask)}
+                              aria-label="Excluir subtarefa"
+                            >
+                              <Trash2 className="size-4 text-rose-500" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-white/40">
+                        <Circle className="size-3" />
+                        Sem subtarefas ainda.
+                      </p>
+                    )}
+
+                    <form
+                      onSubmit={onSubmitSubtask}
+                      aria-busy={busy}
+                      className={[
+                        "mt-3 flex min-w-0 flex-col gap-2 rounded-xl sm:flex-row",
+                        busy ? "subtask-form-loading" : "",
+                      ].join(" ")}
                     >
-                      {busy ? (
-                        <Loader2 className="size-4 animate-spin" />
+                      <Input
+                        className="h-11 min-w-0 rounded-xl border-slate-900/10 bg-white text-base shadow-none sm:h-9 sm:text-sm dark:border-white/10 dark:bg-black/20"
+                        value={subtaskDraft}
+                        disabled={busy}
+                        onChange={(event) =>
+                          onSubtaskDraftChange(event.target.value)
+                        }
+                        placeholder="Nova subtarefa"
+                        maxLength={160}
+                      />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        className="h-11 w-full touch-manipulation rounded-xl px-4 sm:h-9 sm:w-auto"
+                        disabled={busy || !subtaskDraft.trim()}
+                      >
+                        {busy ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <CirclePlus className="size-4" />
+                        )}
+                        {busy ? "Adicionando…" : "Adicionar"}
+                      </Button>
+                    </form>
+                  </section>
+
+                  <section className="order-4 rounded-2xl border border-teal-500/20 bg-teal-500/[0.03] p-4 dark:bg-teal-400/[0.04]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-200">
+                          Comentários
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-white/45">
+                          Registre observações sem alterar a descrição
+                          principal.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-teal-500/10 px-2 py-1 text-xs font-medium text-teal-700 dark:text-teal-200">
+                        {task.comments.length}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {task.comments.length ? (
+                        task.comments.map((comment) => (
+                          <article
+                            key={comment.id}
+                            className="rounded-xl border border-slate-900/10 border-l-2 border-l-teal-400 bg-white/60 p-3 dark:border-white/10 dark:border-l-teal-300/70 dark:bg-white/[0.045]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <time
+                                  dateTime={comment.created_at}
+                                  className="block text-[11px] text-slate-500 dark:text-white/40"
+                                >
+                                  {formatDateTime(comment.created_at)}
+                                </time>
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                className="size-7 shrink-0 text-rose-500"
+                                onClick={() =>
+                                  void onDeleteTaskComment(task.id, comment.id)
+                                }
+                                aria-label="Excluir comentário"
+                                title="Excluir comentário"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700 dark:text-white/75">
+                              {comment.content}
+                            </p>
+                          </article>
+                        ))
                       ) : (
-                        <CirclePlus className="size-4" />
+                        <p className="rounded-xl border border-dashed border-slate-900/10 px-3 py-4 text-center text-sm text-slate-500 dark:border-white/10 dark:text-white/40">
+                          Nenhum comentário ainda.
+                        </p>
                       )}
-                      {busy ? "Adicionando…" : "Adicionar"}
-                    </Button>
-                  </form>
-                </section>
-              </div>
+                    </div>
+
+                    <form
+                      className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!commentDraft.trim()) return;
+                        void onAddTaskComment(task.id, commentDraft).then(() =>
+                          setCommentDraft(""),
+                        );
+                      }}
+                    >
+                      <Input
+                        value={commentDraft}
+                        onChange={(event) =>
+                          setCommentDraft(event.target.value)
+                        }
+                        placeholder="Escrever um comentário..."
+                        maxLength={2000}
+                        className="min-w-0 flex-1 rounded-xl"
+                      />
+                      <Button
+                        type="submit"
+                        disabled={!commentDraft.trim()}
+                        className="rounded-xl"
+                      >
+                        Comentar
+                      </Button>
+                    </form>
+                  </section>
+                </div>
               )}
             </div>
           </>
@@ -2314,7 +2626,8 @@ function TaskHistoryDialog({
             <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/45">
-                  {history.length} {history.length === 1 ? "registro" : "registros"}
+                  {history.length}{" "}
+                  {history.length === 1 ? "registro" : "registros"}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-white/45">
                   Status atual: {getStatusLabel(task.status)}
@@ -2433,6 +2746,27 @@ function getAttachmentUrl(taskId: string, attachmentId: string) {
   return `/api/tasks/${taskId}/attachments/${attachmentId}`;
 }
 
+function formatFileSize(size: number | null) {
+  if (!size) return "tamanho indisponível";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getAttachmentTooltip(attachment: TaskAttachment) {
+  const extension =
+    attachment.file_name.split(".").pop()?.toUpperCase() || "ARQ";
+  const kind =
+    getAttachmentKind(attachment) === "pdf"
+      ? "PDF"
+      : attachment.mime_type || "Arquivo";
+  const viewed = attachment.last_viewed_at
+    ? `visto ${formatCompactDate(attachment.last_viewed_at)}`
+    : "não visualizado";
+
+  return `${attachment.file_name} · ${kind} · ${formatFileSize(attachment.file_size)} · .${extension} · adicionado ${formatCompactDate(attachment.created_at)} · ${viewed}`;
+}
+
 function getAttachmentKind(attachment: TaskAttachment) {
   const mimeType = attachment.mime_type.toLocaleLowerCase();
   const extension = attachment.file_name.split(".").pop()?.toLocaleLowerCase();
@@ -2443,7 +2777,18 @@ function getAttachmentKind(attachment: TaskAttachment) {
   if (
     mimeType.startsWith("text/") ||
     mimeType === "application/json" ||
-    ["txt", "md", "csv", "json", "log", "xml", "html", "css", "js", "ts"].includes(extension ?? "")
+    [
+      "txt",
+      "md",
+      "csv",
+      "json",
+      "log",
+      "xml",
+      "html",
+      "css",
+      "js",
+      "ts",
+    ].includes(extension ?? "")
   ) {
     return "text";
   }
@@ -2454,7 +2799,13 @@ function isImageAttachment(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
-function AttachmentIcon({ attachment, className = "size-5" }: { attachment: TaskAttachment; className?: string }) {
+function AttachmentIcon({
+  attachment,
+  className = "size-5",
+}: {
+  attachment: TaskAttachment;
+  className?: string;
+}) {
   const kind = getAttachmentKind(attachment);
   const Icon =
     kind === "image"
@@ -2469,15 +2820,26 @@ function AttachmentIcon({ attachment, className = "size-5" }: { attachment: Task
   return <Icon className={className} />;
 }
 
-function TaskAttachmentBadge({ attachments }: { attachments: TaskAttachment[] }) {
+function TaskAttachmentBadge({
+  attachments,
+}: {
+  attachments: TaskAttachment[];
+}) {
   const kinds = new Set(attachments.map(getAttachmentKind));
   const firstAttachment = attachments[0];
-  const icon = kinds.size === 1 && firstAttachment
-    ? <AttachmentIcon attachment={firstAttachment} className="size-3" />
-    : <Paperclip className="size-3" />;
+  const icon =
+    kinds.size === 1 && firstAttachment ? (
+      <AttachmentIcon attachment={firstAttachment} className="size-3" />
+    ) : (
+      <Paperclip className="size-3" />
+    );
 
   return (
-    <Badge variant="outline" className="gap-1" title={`${attachments.length} arquivo(s) anexado(s)`}>
+    <Badge
+      variant="outline"
+      className="gap-1"
+      title={`${attachments.length} arquivo(s) anexado(s)`}
+    >
       {icon}
       {attachments.length}
     </Badge>
@@ -2549,12 +2911,20 @@ function AttachmentViewer({
               </>
             ) : getAttachmentKind(attachment) === "audio" ? (
               <div className="flex w-full max-w-xl flex-col items-center gap-5 rounded-xl bg-white/5 p-8 text-center">
-                <AttachmentIcon attachment={attachment} className="size-12 text-slate-300" />
-                <audio controls className="w-full" src={getAttachmentUrl(viewer.task.id, attachment.id)}>
+                <AttachmentIcon
+                  attachment={attachment}
+                  className="size-12 text-slate-300"
+                />
+                <audio
+                  controls
+                  className="w-full"
+                  src={getAttachmentUrl(viewer.task.id, attachment.id)}
+                >
                   Seu navegador não suporta a reprodução deste áudio.
                 </audio>
               </div>
-            ) : getAttachmentKind(attachment) === "pdf" || getAttachmentKind(attachment) === "text" ? (
+            ) : getAttachmentKind(attachment) === "pdf" ||
+              getAttachmentKind(attachment) === "text" ? (
               <iframe
                 src={getAttachmentUrl(viewer.task.id, attachment.id)}
                 title={`Prévia de ${attachment.file_name}`}
@@ -2562,11 +2932,16 @@ function AttachmentViewer({
               />
             ) : (
               <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-xl px-8 text-center">
-                <AttachmentIcon attachment={attachment} className="size-12 text-slate-400" />
+                <AttachmentIcon
+                  attachment={attachment}
+                  className="size-12 text-slate-400"
+                />
                 <span className="max-w-64 break-words">
                   {attachment.file_name}
                 </span>
-                <span className="text-sm text-white/60">Prévia indisponível para este tipo de arquivo.</span>
+                <span className="text-sm text-white/60">
+                  Prévia indisponível para este tipo de arquivo.
+                </span>
               </div>
             )}
             {count > 1 ? (
@@ -2608,17 +2983,25 @@ function AttachmentViewer({
 function AttachmentPreview({
   attachment,
   taskId,
+  compact = false,
 }: {
   attachment: TaskAttachment;
   taskId: string;
+  compact?: boolean;
 }) {
   if (!isImageAttachment(attachment.mime_type)) {
     return (
       <span
-        className="flex size-16 items-center justify-center rounded-lg bg-slate-900/5 text-slate-500 dark:bg-white/10"
+        className={[
+          "flex items-center justify-center rounded-lg bg-slate-900/5 text-slate-500 dark:bg-white/10",
+          compact ? "size-11" : "size-16",
+        ].join(" ")}
         title={attachment.file_name}
       >
-        <AttachmentIcon attachment={attachment} className="size-6" />
+        <AttachmentIcon
+          attachment={attachment}
+          className={compact ? "size-5" : "size-6"}
+        />
       </span>
     );
   }
@@ -2630,7 +3013,10 @@ function AttachmentPreview({
       <img
         src={getAttachmentUrl(taskId, attachment.id)}
         alt={attachment.file_name}
-        className="size-16 rounded-lg object-cover transition group-hover/image:scale-105"
+        className={[
+          compact ? "size-11" : "size-16",
+          "rounded-lg object-cover transition group-hover/image:scale-105",
+        ].join(" ")}
       />
     </>
   );
@@ -2651,6 +3037,7 @@ function TaskEditForm({
   onSave: (changes: {
     attachments: File[];
     attachmentIdsToDelete: string[];
+    dateDetails?: Partial<Omit<DateDetails, "task_id">>;
   }) => Promise<void>;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -2663,6 +3050,9 @@ function TaskEditForm({
   const [attachmentPendingDeletion, setAttachmentPendingDeletion] =
     useState<TaskAttachment | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [dateDetails, setDateDetails] = useState<
+    Partial<Omit<DateDetails, "task_id">>
+  >(task.date_details ?? {});
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const hasDetailChanges =
@@ -2699,9 +3089,7 @@ function TaskEditForm({
     if (files.length) selectAttachments(files);
   };
 
-  const handleDescriptionChange = (
-    event: ChangeEvent<HTMLTextAreaElement>,
-  ) => {
+  const handleDescriptionChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const expansion = expandSlashCodeCommand(
       event.target.value,
       event.target.selectionStart,
@@ -2757,13 +3145,148 @@ function TaskEditForm({
         maxLength={120}
       />
 
+      {editingState.type === "date" ? (
+        <section className="rounded-2xl border border-pink-500/20 bg-pink-500/[0.04] p-3">
+          <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-200">
+            Dados estruturados do Date
+          </h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-white/45">
+            Preencha estes dados primeiro; use a descrição para observações
+            adicionais.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Input
+              type="text"
+              placeholder="Trabalho"
+              value={String(dateDetails.work ?? "")}
+              onChange={(event) =>
+                setDateDetails((current) => ({
+                  ...current,
+                  work: event.target.value || null,
+                }))
+              }
+            />
+            {[
+              ["age", "Idade", "number"],
+              ["sign", "Signo", "text"],
+              ["address", "Endereço", "text"],
+              ["height", "Altura", "text"],
+              ["location", "Local", "text"],
+            ].map(([key, label, type]) => (
+              <Input
+                key={key}
+                type={type}
+                placeholder={label}
+                value={String(
+                  dateDetails[key as keyof typeof dateDetails] ?? "",
+                )}
+                onChange={(event) =>
+                  setDateDetails((current) => ({
+                    ...current,
+                    [key]:
+                      type === "number"
+                        ? event.target.value
+                          ? Number(event.target.value)
+                          : null
+                        : event.target.value || null,
+                  }))
+                }
+              />
+            ))}
+            <DatePicker
+              value={dateDetails.date_at ?? null}
+              onChange={(value) =>
+                setDateDetails((current) => ({ ...current, date_at: value }))
+              }
+              placeholder="Data do date"
+            />
+            <Select
+              value={
+                dateDetails.has_children == null
+                  ? "not-informed"
+                  : String(dateDetails.has_children)
+              }
+              onValueChange={(value) =>
+                setDateDetails((current) => ({
+                  ...current,
+                  has_children:
+                    value === "not-informed" ? null : value === "true",
+                }))
+              }
+            >
+              <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                <span className="flex h-full items-center">
+                  {dateDetails.has_children == null
+                    ? "Tem filho?"
+                    : dateDetails.has_children
+                      ? "Tem filho: Sim"
+                      : "Tem filho: Não"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="not-informed">
+                  Tem filho? (não informado)
+                </SelectItem>
+                <SelectItem value="true">Sim</SelectItem>
+                <SelectItem value="false">Não</SelectItem>
+              </SelectContent>
+            </Select>
+            {[
+              ["personality_rating", "Nota personalidade"],
+              ["face_rating", "Nota rosto"],
+              ["body_rating", "Nota corpo"],
+              ["sex_rating", "Nota sexo"],
+            ].map(([key, label]) => (
+              <Select
+                key={key}
+                value={
+                  dateDetails[key as keyof typeof dateDetails] == null
+                    ? "unrated"
+                    : String(dateDetails[key as keyof typeof dateDetails])
+                }
+                onValueChange={(value) =>
+                  setDateDetails((current) => ({
+                    ...current,
+                    [key]: value === "unrated" ? null : Number(value),
+                  }))
+                }
+              >
+                <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                  <span className="flex h-full items-center">
+                    {dateDetails[key as keyof typeof dateDetails] == null
+                      ? `${label} (1–10)`
+                      : `${label}: ${dateDetails[key as keyof typeof dateDetails]}`}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unrated">
+                    {label} (não informada)
+                  </SelectItem>
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map(
+                    (rating) => (
+                      <SelectItem key={rating} value={String(rating)}>
+                        {rating}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <Textarea
         ref={descriptionRef}
         className="min-h-20 rounded-2xl border-slate-900/10 bg-white shadow-none dark:border-white/10 dark:bg-black/20 disabled:opacity-60"
         value={editingState.description}
         disabled={isSaving}
         onChange={handleDescriptionChange}
-        placeholder="Descrição opcional"
+        placeholder={
+          editingState.type === "date"
+            ? "Observações adicionais (opcional)"
+            : "Descrição opcional"
+        }
         rows={3}
       />
       <div className="rounded-2xl border border-slate-900/10 p-3 dark:border-white/10">
@@ -2775,8 +3298,14 @@ function TaskEditForm({
             {sortAttachments(task.attachments)
               .filter((item) => !attachmentIdsToDelete.includes(item.id))
               .map((item) => (
-                <div key={item.id} className="relative">
+                <div key={item.id} className="relative w-28 min-w-0">
                   <AttachmentPreview attachment={item} taskId={task.id} />
+                  <span
+                    className="mt-1 block w-full truncate text-center text-[11px] text-slate-600 dark:text-white/65"
+                    title={item.file_name}
+                  >
+                    {item.file_name}
+                  </span>
                   <Button
                     type="button"
                     size="icon-sm"
@@ -2812,9 +3341,14 @@ function TaskEditForm({
             {pendingAttachments.map((attachment, index) => (
               <span
                 key={`${attachment.name}-${attachment.lastModified}-${index}`}
-                className="flex items-center rounded-full bg-teal-500/10 pl-2.5 text-xs text-teal-700 dark:text-teal-200"
+                className="flex min-w-0 max-w-52 items-center rounded-full bg-teal-500/10 pl-2.5 text-xs text-teal-700 dark:text-teal-200"
               >
-                {attachment.name || "Arquivo"}
+                <span
+                  className="min-w-0 truncate"
+                  title={attachment.name || "Arquivo"}
+                >
+                  {attachment.name || "Arquivo"}
+                </span>
                 <Button
                   type="button"
                   size="icon-sm"
@@ -2877,14 +3411,10 @@ function TaskEditForm({
           onValueChange={(value) =>
             setEditingState((current) => {
               if (!current) return current;
-              const type = (value ?? "task") as TaskType;
+              const type = (value ?? "feature") as TaskType;
               return {
                 ...current,
                 type,
-                description:
-                  type === "date"
-                    ? DATE_DESCRIPTION_TEMPLATE
-                    : current.description,
               };
             })
           }
@@ -2934,7 +3464,6 @@ function TaskEditForm({
             ))}
           </SelectContent>
         </Select>
-
       </div>
 
       <div className="flex gap-2">
@@ -2943,7 +3472,12 @@ function TaskEditForm({
           size="sm"
           className="h-11 flex-1 gap-1.5 touch-manipulation rounded-full px-4 sm:h-7 sm:flex-none sm:px-2.5"
           onClick={() =>
-            onSave({ attachments: pendingAttachments, attachmentIdsToDelete })
+            onSave({
+              attachments: pendingAttachments,
+              attachmentIdsToDelete,
+              dateDetails:
+                editingState.type === "date" ? dateDetails : undefined,
+            })
           }
           disabled={!hasChanges || isSaving}
         >
