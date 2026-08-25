@@ -2935,7 +2935,7 @@ body,
   top: 50%;
   left: 10%;
   width: 80%;
-  height: 2px;
+  height: 3px;
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
@@ -2968,7 +2968,7 @@ body,
     rgb(0 0 0 / 55%) 91%,
     transparent 100%
   );
-  filter: blur(0.15px);
+  filter: blur(0.65px);
   transform: translateY(-50%);
   animation: compact-joy-ribbon 5.6s ease-in-out infinite;
 }
@@ -3993,11 +3993,7 @@ body,
   .app-notes-live::before,
   .app-notes-live::after,
   .app-empty-signal::before,
-  .app-empty-signal > svg,
-  .compact-joy-field__halo,
-  .compact-joy-field__ribbon,
-  .compact-joy-field__particle,
-  .compact-joy-field__spark {
+  .app-empty-signal > svg {
     animation: none !important;
   }
 
