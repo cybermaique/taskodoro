@@ -2946,8 +2946,29 @@ body,
     #facc15 82%,
     transparent
   );
-  box-shadow: 0 0 14px color-mix(in srgb, var(--profile-accent) 65%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--profile-accent) 65%, transparent),
+    0 0 30px color-mix(in srgb, var(--profile-accent) 24%, transparent);
   opacity: 0.8;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(0 0 0 / 55%) 9%,
+    #000 17%,
+    #000 83%,
+    rgb(0 0 0 / 55%) 91%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(0 0 0 / 55%) 9%,
+    #000 17%,
+    #000 83%,
+    rgb(0 0 0 / 55%) 91%,
+    transparent 100%
+  );
+  filter: blur(0.15px);
   transform: translateY(-50%);
   animation: compact-joy-ribbon 5.6s ease-in-out infinite;
 }
