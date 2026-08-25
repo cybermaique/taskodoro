@@ -40,12 +40,33 @@ export const TASK_CATEGORY_OPTIONS = [
   { value: "pessoal", label: "Pessoal" },
 ] as const;
 
+export const DATE_MEETING_SOURCE_OPTIONS = [
+  { value: "instagram", label: "Instagram" },
+  { value: "facebook", label: "Facebook" },
+  { value: "tinder", label: "Tinder" },
+  { value: "happn", label: "Happn" },
+  { value: "bumble", label: "Bumble" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "amigos", label: "Amigos ou conhecidos" },
+  { value: "trabalho", label: "Trabalho" },
+  { value: "estudos", label: "Estudos" },
+  { value: "evento", label: "Evento ou festa" },
+  { value: "academia", label: "Academia" },
+  { value: "outro", label: "Outro" },
+] as const;
+
+export type DateMeetingSource = (typeof DATE_MEETING_SOURCE_OPTIONS)[number]["value"];
+
+export function getDateMeetingSourceLabel(value: string | null | undefined) {
+  if (!value) return null;
+  return DATE_MEETING_SOURCE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
 export const DATE_DESCRIPTION_TEMPLATE = `Idade:
 Signo:
 Endereço:
 Altura:
 Tem filho:
-Local date:
 Data date:
 
 Nota personalidade:
@@ -101,6 +122,7 @@ export interface DateDetails {
   address: string | null;
   height: string | null;
   work: string | null;
+  met_via: string | null;
   has_children: boolean | null;
   location: string | null;
   date_at: string | null;

@@ -639,6 +639,10 @@ body,
     padding-left: max(1rem, var(--safe-area-left));
   }
 
+  .dashboard-safe-insets-compact {
+    padding-top: max(0px, var(--safe-area-top));
+  }
+
   .access-safe-insets {
     padding-top: max(2.5rem, var(--safe-area-top));
     padding-right: max(1rem, var(--safe-area-right));
@@ -889,26 +893,26 @@ body,
 @keyframes access-icon-float {
   0%,
   100% {
-    box-shadow: 0 8px 22px rgb(20 184 166 / 20%);
+    box-shadow: 0 8px 22px var(--profile-accent-soft);
     transform: translateY(0) rotate(-2deg);
   }
   50% {
-    box-shadow: 0 14px 32px rgb(99 102 241 / 28%);
+    box-shadow: 0 14px 32px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: translateY(-5px) rotate(3deg);
   }
 }
 
 @keyframes access-logo-orbit {
   0% {
-    box-shadow: 0 0 0 0 rgb(45 212 191 / 36%), 0 0 24px rgb(99 102 241 / 28%);
+    box-shadow: 0 0 0 0 var(--profile-accent-soft), 0 0 24px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: rotate(0deg) scale(0.92);
   }
   50% {
-    box-shadow: 0 0 0 12px rgb(45 212 191 / 0%), 0 0 44px rgb(99 102 241 / 46%);
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--profile-accent) 0%, transparent), 0 0 44px color-mix(in srgb, var(--profile-accent) 46%, transparent);
     transform: rotate(180deg) scale(1.08);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(45 212 191 / 0%), 0 0 24px rgb(99 102 241 / 28%);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--profile-accent) 0%, transparent), 0 0 24px color-mix(in srgb, var(--profile-accent) 28%, transparent);
     transform: rotate(360deg) scale(0.92);
   }
 }
@@ -2627,9 +2631,9 @@ body,
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 20%, rgb(45 212 191 / 16%), transparent 34%),
-    radial-gradient(circle at 82% 78%, rgb(99 102 241 / 18%), transparent 38%),
-    linear-gradient(145deg, var(--background), color-mix(in oklab, var(--background) 90%, #14b8a6));
+    radial-gradient(circle at 18% 20%, var(--profile-accent-soft), transparent 34%),
+    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--profile-accent) 16%, transparent), transparent 38%),
+    linear-gradient(145deg, var(--background), color-mix(in oklab, var(--background) 90%, var(--profile-accent)));
 }
 
 .access-loading-screen {
@@ -2662,7 +2666,7 @@ body,
   top: 12%;
   width: 11rem;
   height: 11rem;
-  background: radial-gradient(circle at 35% 30%, #5eead4, #0f766e 70%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 65%, white), var(--profile-accent-strong) 70%);
 }
 
 .access-orb-two {
@@ -2670,7 +2674,7 @@ body,
   bottom: 9%;
   width: 14rem;
   height: 14rem;
-  background: radial-gradient(circle at 35% 30%, #c4b5fd, #4f46e5 72%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 30%, white), color-mix(in srgb, var(--profile-accent) 72%, #312e81) 72%);
   animation-delay: -2.7s;
 }
 
@@ -2679,7 +2683,7 @@ body,
   top: 10%;
   width: 5rem;
   height: 5rem;
-  background: radial-gradient(circle at 35% 30%, #f9a8d4, #be185d 72%);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--profile-accent) 24%, white), color-mix(in srgb, var(--profile-accent) 72%, #9d174d) 72%);
   animation-delay: -5.2s;
 }
 
@@ -2704,10 +2708,10 @@ body,
   width: 3.5rem;
   height: 3.5rem;
   place-items: center;
-  border: 1px solid rgb(45 212 191 / 35%);
+  border: 1px solid color-mix(in srgb, var(--profile-accent) 52%, transparent);
   border-radius: 1.15rem;
-  background: linear-gradient(135deg, rgb(20 184 166 / 18%), rgb(99 102 241 / 20%));
-  color: #14b8a6;
+  background: linear-gradient(135deg, var(--profile-accent-soft), color-mix(in srgb, var(--profile-accent) 12%, #6366f1));
+  color: var(--profile-accent);
 }
 
 .access-login-icon {
@@ -2733,9 +2737,9 @@ body,
   top: 50%;
   width: 12rem;
   height: 12rem;
-  border: 2px solid rgb(45 212 191 / 55%);
+  border: 2px solid color-mix(in srgb, var(--profile-accent) 55%, transparent);
   border-radius: 9999px;
-  background: radial-gradient(circle, rgb(45 212 191 / 20%), transparent 66%);
+  background: radial-gradient(circle, var(--profile-accent-soft), transparent 66%);
   animation: access-transition-ripple 950ms ease-out both;
 }
 
@@ -2904,6 +2908,206 @@ body,
     var(--profile-accent-action)
   );
   box-shadow: 0 0 12px var(--profile-accent-soft);
+}
+
+.compact-joy-field {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 5rem;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.compact-joy-field__halo {
+  display: none;
+}
+
+.compact-joy-field__ribbon {
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  width: 80%;
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #2dd4bf 18%,
+    #818cf8 42%,
+    #f472b6 64%,
+    #facc15 82%,
+    transparent
+  );
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--profile-accent) 65%, transparent),
+    0 0 30px color-mix(in srgb, var(--profile-accent) 24%, transparent);
+  opacity: 0.8;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(0 0 0 / 55%) 9%,
+    #000 17%,
+    #000 83%,
+    rgb(0 0 0 / 55%) 91%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(0 0 0 / 55%) 9%,
+    #000 17%,
+    #000 83%,
+    rgb(0 0 0 / 55%) 91%,
+    transparent 100%
+  );
+  filter: blur(0.65px);
+  --joy-tilt: 0deg;
+  transform: translateY(-50%);
+  animation: compact-joy-ribbon 5.6s ease-in-out infinite;
+}
+
+.compact-joy-field__ribbon--second {
+  top: 53%;
+  opacity: 0.4;
+  filter: blur(1px);
+  --joy-tilt: -3deg;
+  transform: translateY(-50%) scaleX(0.72) rotate(-3deg);
+  animation-delay: -2.2s;
+  animation-duration: 6.4s;
+}
+
+.compact-joy-field__ribbon--upper {
+  top: -2%;
+  left: 14%;
+  width: 68%;
+  --joy-tilt: -2deg;
+  opacity: 0.42;
+  transform: translateY(-50%) rotate(-2deg) scaleX(0.78);
+  animation-delay: -1.4s;
+  animation-duration: 6.2s;
+}
+
+.compact-joy-field__ribbon--lower {
+  top: 102%;
+  left: 11%;
+  width: 72%;
+  --joy-tilt: 2deg;
+  opacity: 0.34;
+  transform: translateY(-50%) rotate(2deg) scaleX(0.7);
+  animation-delay: -3.1s;
+  animation-duration: 6.8s;
+}
+
+.compact-joy-field__particle {
+  position: absolute;
+  top: var(--joy-top);
+  left: var(--joy-left);
+  width: var(--joy-size);
+  height: var(--joy-size);
+  border-radius: 9999px;
+  background: var(--profile-accent);
+  box-shadow: 0 0 10px var(--profile-accent-soft);
+  opacity: 0;
+  animation: compact-joy-particle var(--joy-duration) ease-in-out var(--joy-delay) infinite;
+}
+
+.compact-joy-field__particle:nth-of-type(4n) {
+  background: #f472b6;
+  box-shadow: 0 0 12px rgb(244 114 182 / 70%);
+}
+
+.compact-joy-field__particle:nth-of-type(5n) {
+  background: #facc15;
+  box-shadow: 0 0 12px rgb(250 204 21 / 70%);
+}
+
+.compact-joy-field__spark {
+  position: absolute;
+  color: #facc15;
+  font-size: 1rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgb(250 204 21 / 82%);
+  animation: compact-joy-spark 3.6s ease-in-out infinite;
+}
+
+.compact-joy-field__spark--one {
+  top: 6%;
+  left: 27%;
+}
+
+.compact-joy-field__spark--two {
+  top: 54%;
+  left: 55%;
+  color: #f472b6;
+  font-size: 0.78rem;
+  animation-delay: -1.3s;
+}
+
+.compact-joy-field__spark--three {
+  top: 16%;
+  left: 72%;
+  color: #2dd4bf;
+  font-size: 0.72rem;
+  animation-delay: -2.4s;
+}
+
+@keyframes compact-joy-halo {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scaleX(0.72);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scaleX(1.06);
+  }
+}
+
+@keyframes compact-joy-ribbon {
+  0%,
+  100% {
+    opacity: 0.36;
+    transform: translateY(-50%) scaleX(0.74) rotate(var(--joy-tilt, 0deg));
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-50%) scaleX(1.04) rotate(var(--joy-tilt, 0deg));
+  }
+}
+
+@keyframes compact-joy-particle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.35);
+  }
+  28% {
+    opacity: 0.95;
+  }
+  54% {
+    opacity: 0.72;
+    transform: translateY(-0.55rem) scale(1);
+  }
+  78% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes compact-joy-spark {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.55) rotate(0deg);
+  }
+  42% {
+    opacity: 1;
+    transform: scale(1.08) rotate(18deg);
+  }
+  70% {
+    opacity: 0.5;
+    transform: scale(0.82) rotate(36deg);
+  }
 }
 
 .app-click-ripple {
