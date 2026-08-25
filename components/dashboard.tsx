@@ -737,7 +737,10 @@ export function Dashboard({
         <Tabs
           value={selectedTab}
           onValueChange={handleTabChange}
-          className="dashboard-reveal-tabs min-w-0 gap-3 sm:gap-4"
+          className={[
+            "dashboard-reveal-tabs min-w-0",
+            isCompact ? "gap-0" : "gap-3 sm:gap-4",
+          ].join(" ")}
         >
           <TabsList
             className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-2 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
