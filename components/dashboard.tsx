@@ -790,17 +790,19 @@ export function Dashboard({
           open={taskCreateOpen}
           onOpenChange={handleTaskCreateDialogChange}
         >
-          <DialogContent className="h-svh max-h-svh w-screen max-w-none overflow-y-auto rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
+          <DialogContent className="grid h-svh max-h-svh w-screen max-w-none grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden rounded-none border-slate-900/10 bg-white/95 p-4 pt-16 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-4">
             <DialogTitle className="sr-only">Nova tarefa</DialogTitle>
             <DialogDescription className="sr-only">
               Crie uma tarefa com descrição, anexos e subtarefas opcionais.
             </DialogDescription>
-            <TaskForm
-              isSubmitting={creatingTask}
-              isCompact={false}
-              onDirtyChange={setHasUnsavedTaskForm}
-              onCreate={createTask}
-            />
+            <div className="min-h-0 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+              <TaskForm
+                isSubmitting={creatingTask}
+                isCompact={false}
+                onDirtyChange={setHasUnsavedTaskForm}
+                onCreate={createTask}
+              />
+            </div>
           </DialogContent>
         </Dialog>
 
