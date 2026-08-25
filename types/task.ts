@@ -45,7 +45,6 @@ Signo:
 Endereço:
 Altura:
 Tem filho:
-Local date:
 Data date:
 
 Nota personalidade:

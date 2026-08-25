@@ -398,7 +398,7 @@ export function TaskForm({
               <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-200">Dados estruturados do Date</h3>
               <p className="mt-1 text-xs text-slate-500 dark:text-white/45">Preencha estes dados primeiro; use a descrição para observações adicionais.</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"], ["location", "Local", "text"]].map(([key, label, type]) => (
+                {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"]].map(([key, label, type]) => (
                   <Input key={key} type={type} placeholder={label} value={String(dateDetails[key as keyof typeof dateDetails] ?? "")} onChange={(event) => setDateDetails((current) => ({ ...current, [key]: type === "number" ? (event.target.value ? Number(event.target.value) : null) : event.target.value || null }))} />
                 ))}
                 <DatePicker

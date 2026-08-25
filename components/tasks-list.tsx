@@ -2174,7 +2174,6 @@ function TaskDetailsDialog({
                                 ? "Sim"
                                 : "Não",
                           ],
-                          ["Local", task.date_details.location],
                           ["Data", task.date_details.date_at],
                           [
                             "Personalidade",
@@ -3171,7 +3170,6 @@ function TaskEditForm({
               ["sign", "Signo", "text"],
               ["address", "Endereço", "text"],
               ["height", "Altura", "text"],
-              ["location", "Local", "text"],
             ].map(([key, label, type]) => (
               <Input
                 key={key}
