@@ -641,7 +641,9 @@ export function Dashboard({
       <div
         className={[
           "dashboard-safe-insets app-dashboard-stagger relative z-10 flex w-full min-w-0 flex-col",
-          isCompact ? "gap-0" : "gap-4 sm:gap-6",
+          isCompact
+            ? "dashboard-safe-insets-compact gap-0"
+            : "gap-4 sm:gap-6",
         ].join(" ")}
       >
         <header

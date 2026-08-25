@@ -639,6 +639,10 @@ body,
     padding-left: max(1rem, var(--safe-area-left));
   }
 
+  .dashboard-safe-insets-compact {
+    padding-top: max(0px, var(--safe-area-top));
+  }
+
   .access-safe-insets {
     padding-top: max(2.5rem, var(--safe-area-top));
     padding-right: max(1rem, var(--safe-area-right));
