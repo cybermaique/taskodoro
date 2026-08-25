@@ -39,6 +39,8 @@ import {
   getTaskCategoryLabel,
   TASK_CATEGORY_OPTIONS,
   TASK_TYPE_OPTIONS,
+  DATE_MEETING_SOURCE_OPTIONS,
+  getDateMeetingSourceLabel,
   type TaskPriority,
   type TaskType,
   type DateDetails,
@@ -401,6 +403,26 @@ export function TaskForm({
                 {[["age", "Idade", "number"], ["sign", "Signo", "text"], ["address", "Endereço", "text"], ["height", "Altura", "text"], ["work", "Trabalho", "text"]].map(([key, label, type]) => (
                   <Input key={key} type={type} placeholder={label} value={String(dateDetails[key as keyof typeof dateDetails] ?? "")} onChange={(event) => setDateDetails((current) => ({ ...current, [key]: type === "number" ? (event.target.value ? Number(event.target.value) : null) : event.target.value || null }))} />
                 ))}
+                <Select
+                  value={dateDetails.met_via ?? "not-informed"}
+                  onValueChange={(value) => setDateDetails((current) => ({ ...current, met_via: value === "not-informed" ? null : value }))}
+                >
+                  <SelectTrigger className="h-10 rounded-xl border-slate-900/10 bg-white px-3 text-sm shadow-none dark:border-white/10 dark:bg-black/20">
+                    <span className="flex h-full items-center">
+                      {dateDetails.met_via
+                        ? getDateMeetingSourceLabel(dateDetails.met_via)
+                        : "Conheceu por..."}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="not-informed">Conheceu por...</SelectItem>
+                    {DATE_MEETING_SOURCE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <DatePicker
                   value={dateDetails.date_at ?? null}
                   onChange={(value) => setDateDetails((current) => ({ ...current, date_at: value }))}

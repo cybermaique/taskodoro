@@ -65,7 +65,7 @@ const TASK_COLUMNS = `
     changed_at
   ),
   task_date_details(
-    task_id,age,sign,address,height,work,has_children,location,date_at,
+    task_id,age,sign,address,height,work,met_via,has_children,location,date_at,
     personality_rating,face_rating,body_rating,sex_rating
   ),
   task_comments(
