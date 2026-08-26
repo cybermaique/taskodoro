@@ -216,7 +216,7 @@ export function DashboardDataLoader({
           .is("deleted_at", null)
           .order("position", { ascending: true })
           .order("position", { foreignTable: "subtasks", ascending: true }),
-        supabase.from("notes").select("id,title,content,tags,is_pinned,deleted_at,created_at,updated_at,note_attachments(id,note_id,file_name,mime_type,storage_path,file_size,created_at)").is("deleted_at", null).order("created_at", {
+        supabase.from("notes").select("id,title,content,tags,is_pinned,pinned_position,deleted_at,created_at,updated_at,note_attachments(id,note_id,file_name,mime_type,storage_path,file_size,created_at)").is("deleted_at", null).order("created_at", {
           ascending: false,
         }),
         supabase

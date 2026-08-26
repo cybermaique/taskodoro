@@ -1256,20 +1256,35 @@ export function TasksList({
   };
 
   return (
-    <section className="dashboard-reveal-board min-w-0 space-y-4">
-      <div className="dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+    <section
+      className={[
+        "dashboard-reveal-board min-w-0",
+        isCompact ? "space-y-2" : "space-y-4",
+      ].join(" ")}
+    >
+      <div
+        className={[
+          "dashboard-reveal-panel min-w-0 border border-slate-900/10 bg-white/80 shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.07]",
+          isCompact
+            ? "rounded-2xl p-2.5 md:p-3"
+            : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
+        ].join(" ")}
+      >
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold">Tarefas</h2>
-              <p className="text-sm text-slate-500 dark:text-white/45">
+              <h2 className={isCompact ? "text-base font-semibold" : "text-lg font-semibold"}>Tarefas</h2>
+              <p className={isCompact ? "text-xs text-slate-500 dark:text-white/45" : "text-sm text-slate-500 dark:text-white/45"}>
                 {visibleTaskCount} no quadro
               </p>
             </div>
             {onRequestCreate ? (
               <Button
                 type="button"
-                className="h-10 shrink-0 gap-1.5 rounded-full px-3 sm:px-4"
+                className={[
+                  "h-10 shrink-0 gap-1.5 rounded-full px-3 sm:px-4",
+                  isCompact ? "md:h-8 md:text-xs" : "",
+                ].join(" ")}
                 onClick={onRequestCreate}
               >
                 <CirclePlus className="size-4" />
@@ -1280,7 +1295,12 @@ export function TasksList({
           </div>
         </div>
 
-        <div className="mt-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className={[
+            "flex snap-x overflow-x-auto overscroll-x-contain pb-1 touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            isCompact ? "mt-2 gap-1.5" : "mt-4 gap-2",
+          ].join(" ")}
+        >
           {[
             ["all", "Todas"],
             ["work", "Trabalho"],
@@ -1293,7 +1313,10 @@ export function TasksList({
               type="button"
               size="sm"
               variant={viewFilter === value ? "default" : "outline"}
-              className="h-11 snap-start touch-manipulation rounded-full px-4 md:h-7 md:px-2.5"
+              className={[
+                "h-11 snap-start touch-manipulation rounded-full px-4 md:px-2.5",
+                isCompact ? "md:h-6 md:text-xs" : "md:h-7",
+              ].join(" ")}
               onClick={() => setViewFilter(value as TaskView)}
             >
               {label}
@@ -1301,11 +1324,19 @@ export function TasksList({
           ))}
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,17.5%)_minmax(0,17.5%)]">
+        <div
+          className={[
+            "grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,17.5%)_minmax(12rem,17.5%)]",
+            isCompact ? "mt-2" : "mt-4",
+          ].join(" ")}
+        >
           <label className="app-live-search relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
-              className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
+              className={[
+                "h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 text-base shadow-none md:text-sm dark:border-white/10 dark:bg-black/20",
+                isCompact ? "md:h-8" : "md:h-10",
+              ].join(" ")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar tarefas..."
@@ -1320,6 +1351,7 @@ export function TasksList({
               setCreatedTo(to);
             }}
             placeholder="Período de criação"
+            compact={isCompact}
           />
         </div>
       </div>
@@ -1333,7 +1365,12 @@ export function TasksList({
           </p>
         </div>
       ) : (
-        <div className="dashboard-reveal-columns grid min-w-0 grid-cols-1 items-start gap-4 pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0">
+        <div
+          className={[
+            "dashboard-reveal-columns grid min-w-0 grid-cols-1 items-start pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0",
+            isCompact ? "gap-2" : "gap-4",
+          ].join(" ")}
+        >
           {taskSectionOrder.map((section, index) => {
             const tasksByBucket = groupedTasks[section];
             const isSectionExpanded = expandedTaskSections[section] ?? false;
@@ -1359,11 +1396,14 @@ export function TasksList({
                         }
                       : undefined
                   }
-                  className="dashboard-reveal-column app-column-live flex min-w-0 flex-col rounded-3xl border border-slate-900/10 bg-white/55 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1"
+                  className={[
+                    "dashboard-reveal-column app-column-live flex min-w-0 flex-col border border-slate-900/10 bg-white/55 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1",
+                    isCompact ? "rounded-2xl p-2" : "rounded-3xl p-3",
+                  ].join(" ")}
                 >
-                  <div className="mb-3 flex items-center gap-2 px-1">
+                  <div className={isCompact ? "mb-2 flex items-center gap-2" : "mb-3 flex items-center gap-2 px-1"}>
                     <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${taskSectionStyles[section]}`}
+                      className={`rounded-full border text-xs font-semibold ${isCompact ? "px-2 py-0.5" : "px-2.5 py-1"} ${taskSectionStyles[section]}`}
                     >
                       {getStatusLabel(section)}
                     </span>
@@ -1373,12 +1413,15 @@ export function TasksList({
                   </div>
 
                   <ul
-                    className="min-h-24 space-y-3"
+                    className={isCompact ? "min-h-16 space-y-2" : "min-h-24 space-y-3"}
                     onDragOver={(event) => handleDragOver(event)}
                     onDrop={(event) => handleDropOnColumn(event, section)}
                   >
                     {tasksByBucket.length === 0 ? (
-                      <li className="rounded-2xl border border-dashed border-slate-900/15 px-3 py-5 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40">
+                      <li className={[
+                        "rounded-2xl border border-dashed border-slate-900/15 px-3 text-center text-xs text-slate-500 dark:border-white/10 dark:text-white/40",
+                        isCompact ? "py-3" : "py-5",
+                      ].join(" ")}>
                         Arraste uma tarefa para cá
                       </li>
                     ) : null}
@@ -1447,9 +1490,11 @@ export function TasksList({
                               ? "h-auto overflow-visible"
                               : isCompleted
                                 ? "h-auto min-h-0 overflow-visible"
-                                : "min-h-32 overflow-visible",
+                                : isCompact
+                                  ? "min-h-24 overflow-visible"
+                                  : "min-h-32 overflow-visible",
                             isCompact
-                              ? "rounded-2xl p-2.5"
+                              ? "rounded-2xl p-2"
                               : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
                             taskCardBorderStyles[task.status],
                           ].join(" ")}
@@ -1469,7 +1514,7 @@ export function TasksList({
                                 event.stopPropagation();
                               }}
                               onClick={(event) => event.stopPropagation()}
-                              className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 max-md:translate-y-0 max-md:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
+                              className="pointer-events-auto absolute right-3 top-3 z-30 flex translate-y-1 gap-0.5 cursor-pointer rounded-2xl border border-slate-900/15 bg-white/95 p-1 opacity-0 shadow-xl shadow-slate-950/20 backdrop-blur-xl transition-all duration-200 group-hover/task-card:translate-y-0 group-hover/task-card:opacity-100 group-focus-within/task-card:translate-y-0 group-focus-within/task-card:opacity-100 max-md:static max-md:mb-2 max-md:ml-auto max-md:w-fit max-md:translate-y-0 max-md:opacity-100 dark:border-white/15 dark:bg-zinc-950/95 dark:shadow-black/45"
                             >
                               <TaskHistoryAction
                                 task={task}
@@ -1543,20 +1588,23 @@ export function TasksList({
                             </div>
                           ) : null}
                           {isCompleted ? (
-                            <div className="flex min-w-0 flex-col items-start gap-2">
+                            <div className={isCompact ? "flex min-w-0 flex-col items-start gap-1" : "flex min-w-0 flex-col items-start gap-2"}>
                               <button
                                 type="button"
                                 onClick={() => setDetailsTaskId(task.id)}
-                                className="line-clamp-2 w-full text-left text-sm font-semibold leading-snug text-slate-500 dark:text-white/55"
+                                className={[
+                                  "w-full text-left font-semibold leading-snug text-slate-500 dark:text-white/55",
+                                  isCompact ? "line-clamp-1 text-xs" : "line-clamp-2 text-sm",
+                                ].join(" ")}
                                 aria-label={`Abrir tarefa finalizada: ${task.title}`}
                               >
                                 {task.title}
                               </button>
                               <TaskTypeBadge taskType={task.type} />
-                              <TaskCreationDate task={task} />
+                              {!isCompact ? <TaskCreationDate task={task} /> : null}
                             </div>
                           ) : (
-                            <div className="flex min-w-0 flex-1 flex-col gap-3">
+                            <div className={isCompact ? "flex min-w-0 flex-1 flex-col gap-2" : "flex min-w-0 flex-1 flex-col gap-3"}>
                               <div className="flex min-w-0 items-start">
                                 <div
                                   className={[
@@ -1625,10 +1673,10 @@ export function TasksList({
                                             }
                                             aria-haspopup="dialog"
                                             className={[
-                                              "line-clamp-2 w-full cursor-pointer text-left",
+                                              "w-full cursor-pointer text-left",
                                               isCompact
-                                                ? "break-words text-base font-semibold leading-snug"
-                                                : "break-words text-lg font-semibold leading-snug",
+                                                ? "line-clamp-1 break-words text-sm font-semibold leading-snug"
+                                                : "line-clamp-2 break-words text-lg font-semibold leading-snug",
                                               isCompleted
                                                 ? "text-slate-400 line-through dark:text-white/35"
                                                 : "",
@@ -1637,14 +1685,17 @@ export function TasksList({
                                             {task.title}
                                           </button>
                                           {task.description ? (
-                                            <TaskDescription className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45">
+                                            <TaskDescription className={[
+                                              "mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-white/45",
+                                              isCompact ? "line-clamp-1" : "line-clamp-2",
+                                            ].join(" ")}>
                                               {task.description}
                                             </TaskDescription>
                                           ) : null}
                                         </div>
                                       </div>
 
-                                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                      <div className={isCompact ? "flex min-w-0 flex-wrap items-center gap-1" : "flex min-w-0 flex-wrap items-center gap-2"}>
                                         <Badge
                                           className={getPriorityClass(
                                             task.priority,
@@ -1669,18 +1720,24 @@ export function TasksList({
                                             attachments={task.attachments}
                                           />
                                         ) : null}
-                                        <TaskCreationDate task={task} />
+                                        {!isCompact ? <TaskCreationDate task={task} /> : null}
                                       </div>
                                     </>
                                   )}
 
                                   {hasSubtasks ? (
-                                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-white/45">
+                                    <div className={[
+                                      "flex min-w-0 flex-wrap items-center text-xs text-slate-500 dark:text-white/45",
+                                      isCompact ? "gap-1.5" : "gap-2",
+                                    ].join(" ")}>
                                       <span>
                                         Subtarefas {completedSubtasks}/
                                         {task.subtasks.length}
                                       </span>
-                                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10">
+                                      <div className={[
+                                        "h-1.5 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10",
+                                        isCompact ? "w-12" : "w-24",
+                                      ].join(" ")}>
                                         <div
                                           className="h-full rounded-full bg-teal-500 transition-[width] duration-700 ease-out"
                                           style={{
@@ -1688,11 +1745,13 @@ export function TasksList({
                                           }}
                                         />
                                       </div>
-                                      <span className="min-w-0 max-w-full truncate">
-                                        {task.subtasks.find(
-                                          (subtask) => !subtask.is_completed,
-                                        )?.title ?? "Todas concluídas"}
-                                      </span>
+                                      {!isCompact ? (
+                                        <span className="min-w-0 max-w-full truncate">
+                                          {task.subtasks.find(
+                                            (subtask) => !subtask.is_completed,
+                                          )?.title ?? "Todas concluídas"}
+                                        </span>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                 </div>

@@ -90,7 +90,6 @@ interface ProfileSettingsProps {
   userEmail: string | null;
   onProfileChange: (profile: Profile) => void;
   displayMode: ProfileDisplayMode;
-  onDisplayModeChange: (mode: ProfileDisplayMode) => void;
   onOpenTrash: () => void;
 }
 
@@ -99,7 +98,6 @@ export function ProfileSettings({
   userEmail,
   onProfileChange,
   displayMode,
-  onDisplayModeChange,
   onOpenTrash,
 }: ProfileSettingsProps) {
   const fallbackNickname = getFallbackNickname(userEmail);
@@ -110,6 +108,8 @@ export function ProfileSettings({
   const [accentColor, setAccentColor] = useState<ProfileAccent>(
     profile?.accent_color ?? "teal",
   );
+  const [displayModeDraft, setDisplayModeDraft] =
+    useState<ProfileDisplayMode>(displayMode);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -304,6 +304,7 @@ export function ProfileSettings({
           nickname: nextNickname,
           avatar_url: avatarUrl,
           accent_color: accentColor,
+          display_mode: displayModeDraft,
         })
         .select("id,nickname,avatar_url,accent_color,display_mode,task_column_widths,created_at,updated_at")
         .single();
@@ -420,9 +421,11 @@ export function ProfileSettings({
           <button
             type="button"
             role="menuitem"
-            className="app-menu-action flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
+            className="app-menu-action mb-1.5 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
             onClick={() => {
               setProfileMenuOpen(false);
+              setDisplayModeDraft(displayMode);
+              setError(null);
               setOpen(true);
             }}
           >
@@ -545,17 +548,18 @@ export function ProfileSettings({
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-slate-900/10 bg-white/60 p-1 dark:border-white/10 dark:bg-white/[0.04]">
               {([
                 ["full", "Completo", "Mostra mais detalhes"],
-                ["compact", "Compacto", "Mostra mais tarefas"],
+                ["compact", "Compacto", "Reduz cards e espaçamentos"],
               ] as const).map(([mode, label, description]) => (
                 <button
                   key={mode}
                   type="button"
-                  className={`app-choice-button rounded-xl px-3 py-2 text-left ${displayMode === mode ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-zinc-950" : "text-slate-600 dark:text-white/65"}`}
-                  onClick={() => onDisplayModeChange(mode)}
-                  aria-pressed={displayMode === mode}
+                  className={`app-choice-button rounded-xl px-3 py-2 text-left ${displayModeDraft === mode ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-zinc-950" : "text-slate-600 dark:text-white/65"}`}
+                  onClick={() => setDisplayModeDraft(mode)}
+                  disabled={saving}
+                  aria-pressed={displayModeDraft === mode}
                 >
                   <span className="block text-xs font-semibold">{label}</span>
-                  <span className={`mt-0.5 block text-[0.68rem] ${displayMode === mode ? "text-white/70 dark:text-white/70" : "text-slate-400 dark:text-white/40"}`}>
+                  <span className={`mt-0.5 block text-[0.68rem] ${displayModeDraft === mode ? "text-white/70 dark:text-white/70" : "text-slate-400 dark:text-white/40"}`}>
                     {description}
                   </span>
                 </button>
@@ -588,7 +592,7 @@ export function ProfileSettings({
                 <button
                   key={option.value}
                   type="button"
-                  className={`app-choice-button inline-flex min-h-10 w-full items-center justify-start gap-2 rounded-full border px-3 text-xs font-medium ${accentColor === option.value ? "border-slate-900/30 bg-slate-900/5 dark:border-white/30 dark:bg-white/10" : "border-slate-900/10 bg-white/60 dark:border-white/10 dark:bg-white/[0.04]"}`}
+                  className={`app-choice-button inline-flex min-h-11 w-full items-center justify-start gap-2 rounded-full border px-3 text-xs font-medium sm:min-h-10 ${accentColor === option.value ? "border-slate-900/30 bg-slate-900/5 dark:border-white/30 dark:bg-white/10" : "border-slate-900/10 bg-white/60 dark:border-white/10 dark:bg-white/[0.04]"}`}
                   onClick={() => setAccentColor(option.value)}
                   disabled={saving}
                   aria-pressed={accentColor === option.value}
@@ -614,12 +618,18 @@ export function ProfileSettings({
           <Button
             type="button"
             variant="ghost"
+            className="h-11 sm:h-9"
             onClick={() => setOpen(false)}
             disabled={saving}
           >
             Cancelar
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+          <Button
+            type="button"
+            className="h-11 sm:h-9"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
             {saving ? "Salvando…" : "Salvar perfil"}
           </Button>

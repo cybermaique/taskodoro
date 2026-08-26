@@ -190,6 +190,7 @@ create table if not exists public.notes (
   content text not null,
   tags text[],
   is_pinned boolean not null default false,
+  pinned_position integer,
   deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
