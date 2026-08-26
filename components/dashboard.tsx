@@ -707,10 +707,6 @@ export function Dashboard({
               userEmail={userEmail}
               onProfileChange={onProfileChange}
               displayMode={displayMode}
-              onDisplayModeChange={(mode) => {
-                setDisplayMode(mode);
-                void onProfilePreferenceChange({ display_mode: mode });
-              }}
               onOpenTrash={() => void openTrash()}
             />
           </div>
@@ -801,7 +797,7 @@ export function Dashboard({
           </TabsContent>
 
           <TabsContent value="notes" className="dashboard-scene min-w-0">
-            <NotesPanel initialNotes={initialNotes} />
+            <NotesPanel initialNotes={initialNotes} isCompact={isCompact} />
           </TabsContent>
         </Tabs>
 
