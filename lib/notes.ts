@@ -3,7 +3,7 @@ import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { CreateNoteInput, Note, NoteAttachment, UpdateNoteInput } from "@/types/note";
 
-const NOTE_COLUMNS = `id,title,content,tags,is_pinned,deleted_at,created_at,updated_at,
+const NOTE_COLUMNS = `id,title,content,tags,is_pinned,pinned_position,deleted_at,created_at,updated_at,
   note_attachments(id,note_id,file_name,mime_type,storage_path,file_size,created_at)`;
 
 function normalizeNoteTitle(title: string) {
@@ -24,6 +24,8 @@ function mapNote(note: Note): Note {
     ...note,
     tags: Array.isArray(note.tags) ? note.tags : null,
     is_pinned: note.is_pinned === true,
+    pinned_position:
+      typeof note.pinned_position === "number" ? note.pinned_position : null,
     attachments: Array.isArray((note as Note & { note_attachments?: NoteAttachment[] }).note_attachments)
       ? (note as Note & { note_attachments: NoteAttachment[] }).note_attachments
       : note.attachments ?? [],
@@ -153,6 +155,10 @@ export async function updateNote(id: string, input: UpdateNoteInput) {
     updatePayload.is_pinned = input.is_pinned;
   }
 
+  if (typeof input.pinned_position === "number" || input.pinned_position === null) {
+    updatePayload.pinned_position = input.pinned_position;
+  }
+
   if (!Object.keys(updatePayload).length) {
     return getNoteById(id);
   }
@@ -181,6 +187,37 @@ export async function deleteNote(id: string) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function reorderPinnedNotes(noteIds: string[]) {
+  const supabase = await createSupabaseServerClient();
+  const uniqueIds = [...new Set(noteIds)].filter((id) => id.trim().length > 0);
+  if (uniqueIds.length === 0) return;
+
+  const { data, error } = await supabase
+    .from("notes")
+    .select("id")
+    .in("id", uniqueIds)
+    .eq("is_pinned", true)
+    .is("deleted_at", null);
+
+  if (error) throw new Error(error.message);
+
+  const pinnedIds = new Set((data ?? []).map((note) => note.id as string));
+  const orderedIds = uniqueIds.filter((id) => pinnedIds.has(id));
+
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from("notes")
+        .update({ pinned_position: index })
+        .eq("id", id)
+        .eq("is_pinned", true)
+        .is("deleted_at", null),
+    ),
+  );
+  const updateError = results.find((result) => result.error)?.error;
+  if (updateError) throw new Error(updateError.message);
 }
 
 export async function listTrashedNotes() {

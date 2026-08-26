@@ -144,10 +144,14 @@ function getCopyableNoteContent(content: string) {
     .trim();
 }
 
-function getPreview(content: string) {
+function getPreview(
+  content: string,
+  maxLines = NOTE_PREVIEW_MAX_LINES,
+  maxCharacters = NOTE_PREVIEW_MAX_CHARACTERS,
+) {
   const lines = content.split(/\r?\n/);
-  const linePreview = lines.slice(0, NOTE_PREVIEW_MAX_LINES).join("\n");
-  const preview = linePreview.slice(0, NOTE_PREVIEW_MAX_CHARACTERS).trimEnd();
+  const linePreview = lines.slice(0, maxLines).join("\n");
+  const preview = linePreview.slice(0, maxCharacters).trimEnd();
   return {
     content: preview,
     isTruncated: preview.length < content.length,
@@ -275,6 +279,7 @@ function TagChip({ tag, active, onClick }: TagChipProps) {
 
 interface NoteCardProps {
   note: Note;
+  compact?: boolean;
   onUpdate: (id: string, title: string, content: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onTogglePinned: (id: string, isPinned: boolean) => Promise<void>;
@@ -293,6 +298,7 @@ interface NoteCardProps {
 
 function NoteCard({
   note,
+  compact = false,
   onUpdate,
   onDelete,
   onTogglePinned,
@@ -593,16 +599,22 @@ function NoteCard({
 
       const textPreview = full
         ? { content: block.content, isTruncated: false }
-        : getPreview(block.content);
+        : getPreview(block.content, compact ? 3 : undefined, compact ? 280 : undefined);
 
       return (
-        <div key={`text-${index}`} className="space-y-3">
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800 [overflow-wrap:anywhere] dark:text-white/85">
+        <div key={`text-${index}`} className={compact ? "space-y-2" : "space-y-3"}>
+          <p className={[
+            "whitespace-pre-wrap break-words leading-relaxed text-slate-800 [overflow-wrap:anywhere] dark:text-white/85",
+            compact ? "text-xs" : "text-sm",
+          ].join(" ")}>
             {renderContent(textPreview.content)}
             {textPreview.isTruncated ? "…" : null}
           </p>
           {textPreview.isTruncated ? (
-            <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-400/25 dark:bg-violet-400/10 dark:text-violet-200">
+            <div className={[
+              "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200 bg-violet-50 text-xs text-violet-800 dark:border-violet-400/25 dark:bg-violet-400/10 dark:text-violet-200",
+              compact ? "min-h-8 px-2 py-1.5" : "min-h-11 px-3 py-2",
+            ].join(" ")}>
               <Maximize2 className="size-3.5 shrink-0" />
               <span className="font-medium">Conteúdo resumido</span>
               <span className="text-violet-700/75 dark:text-violet-200/70">
@@ -619,7 +631,8 @@ function NoteCard({
   return (
     <div
       className={[
-        "app-note-card app-list-item-enter dashboard-reveal-card group relative min-w-0 rounded-2xl border bg-white/70 p-3 shadow-sm backdrop-blur transition-[border-color,box-shadow] hover:shadow-md sm:p-4",
+        "app-note-card app-list-item-enter dashboard-reveal-card group relative min-w-0 rounded-2xl border bg-white/70 shadow-sm backdrop-blur transition-[border-color,box-shadow] hover:shadow-md",
+        compact ? "p-2.5" : "p-3 sm:p-4",
         "dark:bg-white/[0.05] dark:border-white/10",
         isEditing ? "" : "cursor-pointer",
         isNewlyCreated ? "note-card-created" : "",
@@ -772,14 +785,17 @@ function NoteCard({
         </div>
       ) : (
         <div className="min-w-0 sm:pr-10">
-          <div className="mb-3 min-w-0 space-y-1">
-            <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">
+          <div className={compact ? "mb-2 min-w-0 space-y-0.5" : "mb-3 min-w-0 space-y-1"}>
+            <h3 className={[
+              "truncate font-semibold text-slate-900 dark:text-white",
+              compact ? "text-sm" : "text-base",
+            ].join(" ")}>
               {renderContent(note.title)}
             </h3>
             <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-white/35">
               <Clock className="size-3" />
               <span>Criada em {formatDateTime(note.created_at)}</span>
-              {hasBeenUpdated(note) && (
+              {!compact && hasBeenUpdated(note) && (
                 <span
                   title={`Atualizada em ${formatDateTime(note.updated_at)}`}
                 >
@@ -788,13 +804,13 @@ function NoteCard({
               )}
             </div>
           </div>
-          <div className="space-y-3">{renderNoteContent()}</div>
-          {note.attachments.length ? <div className="mt-3 flex flex-wrap gap-2">{note.attachments.map((attachment) => <a key={attachment.id} href={`/api/notes/${note.id}/attachments/${attachment.id}`} target="_blank" className="max-w-48 truncate rounded-full border border-violet-500/25 px-2 py-1 text-xs text-violet-700 dark:text-violet-200" title={attachment.file_name}>{attachment.file_name}</a>)}</div> : null}
+          <div className={compact ? "space-y-2" : "space-y-3"}>{renderNoteContent()}</div>
+          {note.attachments.length ? <div className={compact ? "mt-2 flex flex-wrap gap-1.5" : "mt-3 flex flex-wrap gap-2"}>{note.attachments.map((attachment) => <a key={attachment.id} href={`/api/notes/${note.id}/attachments/${attachment.id}`} target="_blank" className="max-w-48 truncate rounded-full border border-violet-500/25 px-2 py-1 text-xs text-violet-700 dark:text-violet-200" title={attachment.file_name}>{attachment.file_name}</a>)}</div> : null}
         </div>
       )}
 
       {!isEditing && tags.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div className={compact ? "mt-2 flex flex-wrap items-center gap-1" : "mt-3 flex flex-wrap items-center gap-1.5"}>
           {tags.map((tag) => (
             <TagChip
               key={tag}
@@ -991,6 +1007,7 @@ function NoteCard({
 
 interface NotesPanelProps {
   initialNotes: Note[];
+  isCompact?: boolean;
 }
 
 interface NoteContextMenuState {
@@ -999,7 +1016,7 @@ interface NoteContextMenuState {
   y: number;
 }
 
-export function NotesPanel({ initialNotes }: NotesPanelProps) {
+export function NotesPanel({ initialNotes, isCompact = false }: NotesPanelProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
@@ -1014,6 +1031,16 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [pinningId, setPinningId] = useState<string | null>(null);
+  const [draggedPinnedNoteId, setDraggedPinnedNoteId] = useState<string | null>(
+    null,
+  );
+  const [dragOverPinnedNoteId, setDragOverPinnedNoteId] = useState<string | null>(
+    null,
+  );
+  const [droppedPinnedNoteId, setDroppedPinnedNoteId] = useState<string | null>(
+    null,
+  );
+  const [reorderingPinned, setReorderingPinned] = useState(false);
   const [pinnedViewerNoteId, setPinnedViewerNoteId] = useState<string | null>(
     null,
   );
@@ -1029,6 +1056,9 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     null,
   );
   const newNoteTimeoutRef = useRef<number | null>(null);
+  const pinnedDropTimeoutRef = useRef<number | null>(null);
+  const draggedPinnedNoteIdRef = useRef<string | null>(null);
+  const suppressPinnedClickRef = useRef(false);
   const toast = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1036,6 +1066,9 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
     return () => {
       if (newNoteTimeoutRef.current !== null) {
         window.clearTimeout(newNoteTimeoutRef.current);
+      }
+      if (pinnedDropTimeoutRef.current !== null) {
+        window.clearTimeout(pinnedDropTimeoutRef.current);
       }
     };
   }, []);
@@ -1084,9 +1117,29 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
       notes
         .filter((note) => note.is_pinned)
         .sort(
-          (a, b) =>
-            new Date(b.updated_at).getTime() -
-            new Date(a.updated_at).getTime(),
+          (a, b) => {
+            const aPosition =
+              typeof a.pinned_position === "number"
+                ? a.pinned_position
+                : null;
+            const bPosition =
+              typeof b.pinned_position === "number"
+                ? b.pinned_position
+                : null;
+            if (aPosition !== null && bPosition !== null) {
+              return (
+                aPosition - bPosition ||
+                new Date(b.updated_at).getTime() -
+                  new Date(a.updated_at).getTime()
+              );
+            }
+            if (aPosition !== null) return -1;
+            if (bPosition !== null) return 1;
+            return (
+              new Date(b.updated_at).getTime() -
+              new Date(a.updated_at).getTime()
+            );
+          },
         ),
     [notes],
   );
@@ -1189,7 +1242,21 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         const res = await fetch(`/api/notes/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_pinned: isPinned }),
+          body: JSON.stringify({
+            is_pinned: isPinned,
+            pinned_position: isPinned
+              ? pinnedNotes.reduce(
+                  (maxPosition, note) =>
+                    Math.max(
+                      maxPosition,
+                      typeof note.pinned_position === "number"
+                        ? note.pinned_position
+                        : -1,
+                    ),
+                  -1,
+                ) + 1
+              : null,
+          }),
         });
         const data = (await res.json()) as { note?: Note; error?: string };
         if (!res.ok || !data.note) {
@@ -1211,7 +1278,65 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         setPinningId(null);
       }
     },
-    [toast],
+    [pinnedNotes, toast],
+  );
+
+  const handleReorderPinned = useCallback(
+    async (sourceId: string, targetId: string) => {
+      if (sourceId === targetId || reorderingPinned) return;
+
+      const sourceIndex = pinnedNotes.findIndex((note) => note.id === sourceId);
+      const targetIndex = pinnedNotes.findIndex((note) => note.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return;
+
+      const previousNotes = notes;
+      const reorderedNotes = [...pinnedNotes];
+      const [movedNote] = reorderedNotes.splice(sourceIndex, 1);
+      reorderedNotes.splice(targetIndex, 0, movedNote);
+      const orderedIds = reorderedNotes.map((note) => note.id);
+
+      setNotes((currentNotes) =>
+        currentNotes.map((note) => {
+          const position = orderedIds.indexOf(note.id);
+          return position === -1
+            ? note
+            : { ...note, pinned_position: position };
+        }),
+      );
+      setDraggedPinnedNoteId(null);
+      setDragOverPinnedNoteId(null);
+      setDroppedPinnedNoteId(targetId);
+      setReorderingPinned(true);
+      if (pinnedDropTimeoutRef.current !== null) {
+        window.clearTimeout(pinnedDropTimeoutRef.current);
+      }
+      pinnedDropTimeoutRef.current = window.setTimeout(() => {
+        setDroppedPinnedNoteId(null);
+        pinnedDropTimeoutRef.current = null;
+      }, 420);
+
+      try {
+        const res = await fetch("/api/notes/reorder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteIds: orderedIds }),
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          throw new Error(data.error ?? "Erro ao reordenar anotações fixadas.");
+        }
+      } catch (error) {
+        setNotes(previousNotes);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Erro ao reordenar anotações fixadas.",
+        );
+      } finally {
+        setReorderingPinned(false);
+      }
+    },
+    [notes, pinnedNotes, reorderingPinned, toast],
   );
 
   const handleTagClick = useCallback((tag: string) => {
@@ -1287,7 +1412,12 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
   };
 
   return (
-    <div className="app-notes-live dashboard-reveal-notes min-w-0 space-y-4 sm:space-y-5">
+    <div
+      className={[
+        "app-notes-live dashboard-reveal-notes min-w-0",
+        isCompact ? "space-y-2" : "space-y-4 sm:space-y-5",
+      ].join(" ")}
+    >
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
         <DialogContent className="flex h-svh max-h-svh w-screen max-w-none flex-col overflow-y-auto rounded-none border-slate-900/10 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 sm:h-[calc(100svh-1rem)] sm:max-h-none sm:w-[calc(100vw-1rem)] sm:max-w-none sm:rounded-3xl sm:p-6">
           <DialogTitle className="text-xl">Nova anotação</DialogTitle>
@@ -1372,17 +1502,27 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         onConfirm={() => setCreateDialogOpen(false)}
       />
 
-      <section className="dashboard-reveal-panel min-w-0 rounded-2xl border border-slate-900/10 bg-white/80 p-3 shadow-sm shadow-slate-950/5 backdrop-blur sm:rounded-3xl sm:p-4 dark:border-white/10 dark:bg-white/[0.07]">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <section
+        className={[
+          "dashboard-reveal-panel min-w-0 border border-slate-900/10 bg-white/80 shadow-sm shadow-slate-950/5 backdrop-blur dark:border-white/10 dark:bg-white/[0.07]",
+          isCompact
+            ? "rounded-2xl p-2.5 md:p-3"
+            : "rounded-2xl p-3 sm:rounded-3xl sm:p-4",
+        ].join(" ")}
+      >
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold">Anotações</h2>
-            <p className="text-sm text-slate-500 dark:text-white/45">
+            <h2 className={isCompact ? "text-base font-semibold" : "text-lg font-semibold"}>Anotações</h2>
+            <p className={isCompact ? "text-xs text-slate-500 dark:text-white/45" : "text-sm text-slate-500 dark:text-white/45"}>
               {notes.length} {notes.length === 1 ? "anotação" : "anotações"} no seu espaço
             </p>
           </div>
           <Button
             type="button"
-            className="h-10 shrink-0 gap-1.5 rounded-full bg-violet-600 px-3 text-white hover:bg-violet-700 sm:px-4"
+            className={[
+              "h-10 shrink-0 gap-1.5 rounded-full bg-violet-600 px-3 text-white hover:bg-violet-700 sm:px-4",
+              isCompact ? "md:h-8 md:text-xs" : "",
+            ].join(" ")}
             onClick={() => {
               setError(null);
               setCreateDialogOpen(true);
@@ -1395,25 +1535,80 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
         </div>
 
       {pinnedNotes.length > 0 && (
-        <section className="app-pinned-live app-panel-enter dashboard-reveal-panel mt-4 rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] px-3 py-2.5 dark:border-violet-300/15 dark:bg-violet-400/[0.04]">
+        <section className={[
+          "app-pinned-live app-panel-enter dashboard-reveal-panel rounded-2xl border border-violet-300/30 bg-violet-500/[0.04] dark:border-violet-300/15 dark:bg-violet-400/[0.04]",
+          isCompact ? "mt-2 px-2.5 py-2" : "mt-4 px-3 py-2.5",
+        ].join(" ")}>
           <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600/80 dark:text-violet-200/60">
             <Pin className="size-3.5 fill-current" />
             Fixadas
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div
+            className="flex flex-wrap gap-1.5"
+            aria-label="Anotações fixadas. Arraste para reordenar."
+          >
             {pinnedNotes.map((note) => (
               <button
                 key={note.id}
                 type="button"
-                className="group inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-lg border border-violet-300/35 bg-white/50 px-2.5 text-left text-xs font-medium text-slate-700 transition-all hover:-translate-y-0.5 hover:border-violet-400/70 hover:bg-violet-100/70 hover:text-violet-800 hover:shadow-[0_6px_18px_rgba(139,92,246,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-violet-300/20 dark:bg-white/[0.04] dark:text-white/75 dark:hover:border-violet-300/50 dark:hover:bg-violet-400/10 dark:hover:text-violet-100"
+                draggable={!reorderingPinned}
+                className={[
+                  "group inline-flex min-h-11 max-w-full cursor-grab items-center gap-1.5 rounded-lg border border-violet-300/35 bg-white/50 text-left text-xs font-medium text-slate-700 transition-all hover:-translate-y-0.5 hover:border-violet-400/70 hover:bg-violet-100/70 hover:text-violet-800 hover:shadow-[0_6px_18px_rgba(139,92,246,0.16)] active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 dark:border-violet-300/20 dark:bg-white/[0.04] dark:text-white/75 dark:hover:border-violet-300/50 dark:hover:bg-violet-400/10 dark:hover:text-violet-100",
+                  isCompact ? "px-2 md:min-h-8" : "px-2.5 md:min-h-9",
+                  draggedPinnedNoteId === note.id
+                    ? "scale-[.98] opacity-45"
+                    : "",
+                  dragOverPinnedNoteId === note.id &&
+                  draggedPinnedNoteId !== note.id
+                    ? "-translate-y-1 border-violet-500 bg-violet-100/80 shadow-[0_8px_22px_rgba(139,92,246,0.24)] dark:border-violet-300/70 dark:bg-violet-400/15"
+                    : "",
+                  droppedPinnedNoteId === note.id ? "app-pinned-note-drop" : "",
+                ].join(" ")}
+                onDragStart={(event) => {
+                  draggedPinnedNoteIdRef.current = note.id;
+                  setDraggedPinnedNoteId(note.id);
+                  setDragOverPinnedNoteId(null);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", note.id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  if (draggedPinnedNoteIdRef.current !== note.id) {
+                    setDragOverPinnedNoteId(note.id);
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceId =
+                    draggedPinnedNoteIdRef.current ??
+                    event.dataTransfer.getData("text/plain");
+                  if (sourceId && sourceId !== note.id) {
+                    suppressPinnedClickRef.current = true;
+                    void handleReorderPinned(sourceId, note.id);
+                  }
+                  setDragOverPinnedNoteId(null);
+                }}
+                onDragEnd={() => {
+                  setDraggedPinnedNoteId(null);
+                  setDragOverPinnedNoteId(null);
+                  draggedPinnedNoteIdRef.current = null;
+                  window.setTimeout(() => {
+                    suppressPinnedClickRef.current = false;
+                  }, 0);
+                }}
                 onClick={() => {
+                  if (suppressPinnedClickRef.current) {
+                    suppressPinnedClickRef.current = false;
+                    return;
+                  }
                   setSearch("");
                   setActiveTag(null);
                   setCreatedFrom("");
                   setCreatedTo("");
                   setPinnedViewerNoteId(note.id);
                 }}
-                title="Abrir anota\u00e7\u00e3o"
+                title="Arraste para reordenar ou clique para abrir"
               >
                 <Pin className="size-3 shrink-0 text-violet-500 transition-transform group-hover:-rotate-12 dark:text-violet-300" />
                 <span className="truncate">{note.title}</span>
@@ -1425,15 +1620,18 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
 
       {/* search + tag filters */}
       {notes.length > 0 && (
-        <div className="app-stagger-list dashboard-reveal-panel mt-4 space-y-3">
-          <div className="grid gap-2 md:grid-cols-[minmax(0,17.5%)_minmax(0,17.5%)]">
+        <div className={isCompact ? "app-stagger-list dashboard-reveal-panel mt-2 space-y-2" : "app-stagger-list dashboard-reveal-panel mt-4 space-y-3"}>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,17.5%)_minmax(12rem,17.5%)]">
             <label className="app-live-search relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar anotações…"
-                className="h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 pr-12 text-base shadow-none md:h-10 md:text-sm dark:border-white/10 dark:bg-black/20"
+                className={[
+                  "h-11 min-w-0 rounded-2xl border-slate-900/10 bg-white pl-9 pr-12 text-base shadow-none md:text-sm dark:border-white/10 dark:bg-black/20",
+                  isCompact ? "md:h-8" : "md:h-10",
+                ].join(" ")}
               />
               {search && (
                 <button
@@ -1455,6 +1653,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
                 setCreatedTo(to);
               }}
               placeholder="Período de criação"
+              compact={isCompact}
             />
           </div>
 
@@ -1509,7 +1708,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
           </p>
         </div>
       ) : (
-        <div className="app-stagger-list space-y-3">
+        <div className={isCompact ? "app-stagger-list space-y-2" : "app-stagger-list space-y-3"}>
           {search || activeTag || createdFrom || createdTo ? (
             <p className="text-xs text-slate-400 dark:text-white/35">
               {filtered.length} anotaç{filtered.length === 1 ? "ão" : "ões"}{" "}
@@ -1520,6 +1719,7 @@ export function NotesPanel({ initialNotes }: NotesPanelProps) {
             <NoteCard
               key={note.id}
               note={note}
+              compact={isCompact}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               onTogglePinned={handleTogglePinned}
