@@ -169,7 +169,7 @@ export function DatePicker({
           }
           setOpen((current) => !current);
         }}
-        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-900/10 bg-white px-3 text-left text-sm shadow-none transition hover:border-teal-500/50 focus-visible:border-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-black/20 dark:hover:border-teal-300/50"
+        className="flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-900/10 bg-white px-3 text-left text-sm shadow-none transition hover:border-teal-500/50 focus-visible:border-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 disabled:cursor-not-allowed disabled:opacity-60 md:h-10 dark:border-white/10 dark:bg-black/20 dark:hover:border-teal-300/50"
       >
         <CalendarDays className="size-4 shrink-0 text-teal-600 dark:text-teal-300" />
         <span className={selectedDate ? "truncate" : "truncate text-slate-500 dark:text-white/45"}>
@@ -246,11 +246,13 @@ export function DateRangePicker({
   to,
   onChange,
   placeholder = "Selecionar período",
+  compact = false,
 }: {
   from?: string | null;
   to?: string | null;
   onChange: (from: string, to: string) => void;
   placeholder?: string;
+  compact?: boolean;
 }) {
   const fromDate = parseDate(from);
   const toDate = parseDate(to);
@@ -346,7 +348,10 @@ export function DateRangePicker({
           if (fromDate) setVisibleMonth(new Date(fromDate.getFullYear(), fromDate.getMonth(), 1));
           setOpen((current) => !current);
         }}
-        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-900/10 bg-white px-3 text-left text-sm shadow-none transition hover:border-teal-500/50 focus-visible:border-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 dark:border-white/10 dark:bg-black/20 dark:hover:border-teal-300/50"
+        className={[
+          "flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-900/10 bg-white px-3 text-left text-sm shadow-none transition hover:border-teal-500/50 focus-visible:border-teal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/25 dark:border-white/10 dark:bg-black/20 dark:hover:border-teal-300/50",
+          compact ? "md:h-8 md:text-xs" : "md:h-10",
+        ].join(" ")}
       >
         <CalendarDays className="size-4 shrink-0 text-teal-600 dark:text-teal-300" />
         <span className={fromDate ? "truncate" : "truncate text-slate-500 dark:text-white/45"}>{dateLabel}</span>

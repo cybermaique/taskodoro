@@ -14,6 +14,7 @@ export interface Note {
   content: string;
   tags: string[] | null;
   is_pinned: boolean;
+  pinned_position: number | null;
   deleted_at: string | null;
   attachments: NoteAttachment[];
   created_at: string;
@@ -32,4 +33,5 @@ export interface UpdateNoteInput {
   content?: string;
   tags?: string[] | null;
   is_pinned?: boolean;
+  pinned_position?: number | null;
 }
