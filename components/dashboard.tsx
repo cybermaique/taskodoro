@@ -633,7 +633,12 @@ export function Dashboard({
   };
 
   return (
-    <main className="app-dashboard-enter relative isolate min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white">
+    <main
+      className={[
+        "app-dashboard-enter relative isolate min-h-svh overflow-x-clip bg-[linear-gradient(180deg,#f7f2e8_0%,#eef4f1_48%,#f7f7fb_100%)] text-slate-950 comfort:bg-[linear-gradient(180deg,#f4ead4_0%,#eee1c5_52%,#f7f0df_100%)] comfort:text-[#463421] dark:bg-[linear-gradient(180deg,#090b0d_0%,#101715_48%,#09090b_100%)] dark:text-white",
+        isCompact ? "dashboard-compact" : "",
+      ].join(" ")}
+    >
       <div className="dashboard-boot-layer" aria-hidden="true">
         <span className="dashboard-boot-orb dashboard-boot-orb-primary" />
         <span className="dashboard-boot-orb dashboard-boot-orb-secondary" />
@@ -742,13 +747,19 @@ export function Dashboard({
           ].join(" ")}
         >
           <TabsList
-            className="app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-2 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:min-h-10 sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10"
+            className={[
+              "app-tabs-bar app-tabs-live sticky z-30 grid min-h-12 w-full grid-cols-2 justify-stretch rounded-2xl border border-slate-900/10 bg-white/90 p-1 shadow-sm backdrop-blur-xl sm:static sm:justify-start sm:bg-white/70 sm:shadow-none dark:border-white/10 dark:bg-zinc-900/90 sm:dark:bg-white/10",
+              isCompact ? "sm:min-h-8 sm:rounded-xl sm:p-0.5" : "sm:min-h-10",
+            ].join(" ")}
             style={{ top: "max(0.5rem, var(--safe-area-top))" }}
           >
             <TabsTrigger
               value="tasks"
               aria-label="Tarefas"
-              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+              className={[
+                "app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:px-3",
+                isCompact ? "sm:h-7 sm:rounded-lg sm:text-xs" : "sm:h-8 sm:text-sm",
+              ].join(" ")}
             >
               <ListTodo className="size-4" />
               <span>Tarefas</span>
@@ -756,7 +767,10 @@ export function Dashboard({
             <TabsTrigger
               value="notes"
               aria-label="Anotações"
-              className="app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:h-8 sm:px-3 sm:text-sm"
+              className={[
+                "app-tab-live-trigger h-10 min-w-0 rounded-xl px-1 text-xs sm:px-3",
+                isCompact ? "sm:h-7 sm:rounded-lg sm:text-xs" : "sm:h-8 sm:text-sm",
+              ].join(" ")}
             >
               <StickyNote className="size-4" />
               <span className="sm:hidden">Notas</span>
