@@ -299,9 +299,18 @@ export async function getTaskById(id: string) {
 
 export async function createTask(input: CreateTaskInput) {
   const supabase = await createSupabaseServerClient();
-  const { data: lastTask } = await supabase
-    .from("tasks").select("position").is("deleted_at", null)
-    .order("position", { ascending: false }).limit(1).maybeSingle();
+  const { data: firstTask, error: firstTaskError } = await supabase
+    .from("tasks")
+    .select("position")
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (firstTaskError) {
+    throw new Error(firstTaskError.message);
+  }
+
   const payload = {
     title: input.title.trim(),
     description: normalizeNullableText(input.description),
@@ -309,7 +318,7 @@ export async function createTask(input: CreateTaskInput) {
     priority: normalizePriority(input.priority),
     type: normalizeTaskType(input.type),
     category: normalizeNullableText(input.category),
-    position: (lastTask?.position ?? -1) + 1,
+    position: (firstTask?.position ?? 1) - 1,
     completed_at: null,
   };
 
