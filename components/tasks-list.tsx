@@ -18,8 +18,6 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
-  ArrowDown,
   Bug,
   Heart,
   Circle,
@@ -1127,7 +1125,7 @@ export function TasksList({
   };
 
   const handleDropOnColumn = async (
-    event: DragEvent<HTMLUListElement>,
+    event: DragEvent<HTMLElement>,
     status: TaskSection,
   ) => {
     event.preventDefault();
@@ -1397,9 +1395,11 @@ export function TasksList({
                       : undefined
                   }
                   className={[
-                    "dashboard-reveal-column app-column-live flex min-w-0 flex-col border border-slate-900/10 bg-white/55 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1",
+                    "dashboard-reveal-column app-column-live flex min-h-64 min-w-0 flex-col border border-slate-900/10 bg-white/55 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04] lg:min-w-[13rem] lg:max-w-[44rem] lg:flex-1",
                     isCompact ? "rounded-2xl p-2" : "rounded-3xl p-3",
                   ].join(" ")}
+                  onDragOver={(event) => handleDragOver(event)}
+                  onDrop={(event) => handleDropOnColumn(event, section)}
                 >
                   <div className={isCompact ? "mb-2 flex items-center gap-2" : "mb-3 flex items-center gap-2 px-1"}>
                     <span
@@ -1413,7 +1413,7 @@ export function TasksList({
                   </div>
 
                   <ul
-                    className={isCompact ? "min-h-16 space-y-2" : "min-h-24 space-y-3"}
+                    className={isCompact ? "flex min-h-0 flex-1 flex-col space-y-2" : "flex min-h-0 flex-1 flex-col space-y-3"}
                     onDragOver={(event) => handleDragOver(event)}
                     onDrop={(event) => handleDropOnColumn(event, section)}
                   >
@@ -1520,51 +1520,6 @@ export function TasksList({
                                 task={task}
                                 onClick={() => setHistoryTaskId(task.id)}
                               />
-                              <TaskCardAction
-                                mobileOnly
-                                label="Mover para cima"
-                                disabled={
-                                  isBusy ||
-                                  groupedTasks[task.status][0]?.id === task.id
-                                }
-                                onClick={() => {
-                                  const items = groupedTasks[task.status];
-                                  const index = items.findIndex(
-                                    (item) => item.id === task.id,
-                                  );
-                                  if (index > 0)
-                                    moveTaskNearTask(
-                                      task.id,
-                                      items[index - 1].id,
-                                      false,
-                                    );
-                                }}
-                              >
-                                <ArrowUp className="size-3.5" />
-                              </TaskCardAction>
-                              <TaskCardAction
-                                mobileOnly
-                                label="Mover para baixo"
-                                disabled={
-                                  isBusy ||
-                                  groupedTasks[task.status].at(-1)?.id ===
-                                    task.id
-                                }
-                                onClick={() => {
-                                  const items = groupedTasks[task.status];
-                                  const index = items.findIndex(
-                                    (item) => item.id === task.id,
-                                  );
-                                  if (index >= 0 && index < items.length - 1)
-                                    moveTaskNearTask(
-                                      task.id,
-                                      items[index + 1].id,
-                                      true,
-                                    );
-                                }}
-                              >
-                                <ArrowDown className="size-3.5" />
-                              </TaskCardAction>
                               <TaskCardAction
                                 label="Editar tarefa"
                                 onClick={() => startEdit(task)}
