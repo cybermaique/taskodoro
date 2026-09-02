@@ -1365,7 +1365,7 @@ export function TasksList({
       ) : (
         <div
           className={[
-            "dashboard-reveal-columns grid min-w-0 grid-cols-1 items-start pb-3 sm:grid-cols-2 lg:flex lg:items-start lg:gap-0",
+            "dashboard-reveal-columns grid min-w-0 grid-cols-1 items-stretch pb-3 sm:grid-cols-2 lg:flex lg:items-stretch lg:gap-0",
             isCompact ? "gap-2" : "gap-4",
           ].join(" ")}
         >
